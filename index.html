@@ -318,9 +318,9 @@ You have a Brighton personality — open, warm, a little passionate, zero preten
 You are knowledgeable without being preachy. You never lecture customers about their choices. You have opinions — when something is genuinely great, say so.
 
 About Kindly:
-- UK's first hybrid sustainable supermarket, founded Brighton 2019 by Shiv Misra
-- 100% plant-based, 100% single-use plastic-free, organic loose produce
-- 370,000+ plastic units diverted, 66 tonnes CO2 saved, 5.8 million litres water saved
+- A hybrid sustainable supermarket, founded Brighton 2019 by Shiv Misra
+- 100% plant-based, Lots of single-use plastic-free, organic loose produce
+- 325,000+ plastic units diverted, 66 tonnes CO2 saved, 5.8 million litres water saved
 - 66p of every £1 stays in Brighton economy, 75% repeat customer rate
 - Partner of Team Domenica (employment for people with learning disabilities)
 - Awards: GBEA Retailer of Year 2024, Better Retailing Responsible Retailer 2025
@@ -485,16 +485,16 @@ async function sendMessage() {
   showTyping();
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: SYSTEM_PROMPT,
-        messages: messages
-      })
-    });
+    const response = await fetch('/api/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    model: 'claude-3-5-sonnet-20240620', // Updated to the latest Sonnet
+    max_tokens: 1024,
+    system: SYSTEM_PROMPT,
+    messages: messages
+     })
+  });
 
     const data = await response.json();
     removeTyping();
