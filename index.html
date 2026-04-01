@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #fff8f5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .header {
+    background: #ff0054;
+    color: white;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .header-icon {
+    width: 36px; height: 36px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .header-text h1 { font-size: 18px; font-weight: 600; }
+  .header-text p { font-size: 12px; opacity: 0.85; margin-top: 1px; }
+  .status-dot {
+    width: 8px; height: 8px;
+    background: #4ade80;
+    border-radius: 50%;
+    margin-left: auto;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
+  }
+
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-height: 400px;
+  }
+
+  .message {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+  .message.user { flex-direction: row-reverse; }
+
+  .avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .avatar.sol { background: #ff0054; color: white; }
+  .avatar.user { background: #e8f0eb; color: #4A7C59; }
+
+  .bubble {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 18px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .bubble.sol {
+    background: white;
+    border: 0.5px solid #ffe0e8;
+    border-bottom-left-radius: 4px;
+    color: #1a0a0f;
+  }
+  .bubble.user {
+    background: #ff0054;
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+
+  .typing-indicator {
+    display: flex; gap: 4px; padding: 14px;
+    background: white;
+    border: 0.5px solid #ffe0e8;
+    border-radius: 18px;
+    border-bottom-left-radius: 4px;
+    width: fit-content;
+  }
+  .typing-dot {
+    width: 6px; height: 6px;
+    background: #ff0054;
+    border-radius: 50%;
+    animation: bounce 1.2s infinite;
+    opacity: 0.4;
+  }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-6px); opacity: 1; }
+  }
+
+  .quick-actions {
+    padding: 0 16px 8px;
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .quick-actions::-webkit-scrollbar { display: none; }
+  .quick-btn {
+    white-space: nowrap;
+    padding: 6px 12px;
+    border-radius: 16px;
+    border: 1px solid #ffb3c8;
+    background: white;
+    color: #ff0054;
+    font-size: 12px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .quick-btn:hover { background: #fff0f5; }
+
+  .input-area {
+    padding: 12px 16px;
+    background: white;
+    border-top: 0.5px solid #ffe0e8;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .image-preview {
+    display: none;
+    position: relative;
+    width: fit-content;
+  }
+  .image-preview img {
+    max-height: 80px;
+    border-radius: 8px;
+    border: 1px solid #ffe0e8;
+  }
+  .remove-img {
+    position: absolute;
+    top: -6px; right: -6px;
+    width: 18px; height: 18px;
+    background: #ff0054;
+    color: white;
+    border-radius: 50%;
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    border: none;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+
+  .attach-btn {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: 1px solid #ffb3c8;
+    background: white;
+    color: #ff0054;
+    font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .attach-btn:hover { background: #fff0f5; }
+
+  .text-input {
+    flex: 1;
+    padding: 10px 14px;
+    border-radius: 20px;
+    border: 1px solid #ffb3c8;
+    font-size: 14px;
+    outline: none;
+    resize: none;
+    max-height: 100px;
+    line-height: 1.4;
+    font-family: inherit;
+    background: #fff8f5;
+  }
+  .text-input:focus { border-color: #ff0054; background: white; }
+
+  .send-btn {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: #ff0054;
+    color: white;
+    font-size: 16px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .send-btn:hover { opacity: 0.9; }
+  .send-btn:active { transform: scale(0.95); }
+  .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .api-setup {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #856404;
+    margin: 0 16px 8px;
+  }
+  .api-setup input {
+    width: 100%;
+    margin-top: 6px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid #ffc107;
+    font-size: 12px;
+    font-family: monospace;
+    background: white;
+  }
+
+  #file-input { display: none; }
+
+  .impact-banner {
+    margin: 0 16px 4px;
+    background: #fff0f5;
+    border: 0.5px solid #ffb3c8;
+    border-radius: 12px;
+    padding: 10px 14px;
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .impact-stat { text-align: center; flex-shrink: 0; }
+  .impact-stat .num { font-size: 15px; font-weight: 600; color: #ff0054; }
+  .impact-stat .lbl { font-size: 10px; color: #888; margin-top: 1px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">☀️</div>
+  <div class="header-text">
+    <h1>Sol</h1>
+    <p>Kindly Brighton · Product Guide</p>
+  </div>
+  <div class="status-dot"></div>
+</div>
+
+<div class="impact-banner">
+  <div class="impact-stat"><div class="num">370K+</div><div class="lbl">plastics diverted</div></div>
+  <div class="impact-stat"><div class="num">66t</div><div class="lbl">CO₂ saved</div></div>
+  <div class="impact-stat"><div class="num">66p</div><div class="lbl">stays in Brighton</div></div>
+  <div class="impact-stat"><div class="num">75%</div><div class="lbl">return customers</div></div>
+</div>
+
+<div class="chat-area" id="chat">
+  <div class="message">
+    <div class="avatar sol">S</div>
+    <div class="bubble sol">Hi! I'm Sol — Kindly's product guide. Photograph any product or ask me anything about what's in the shop. What can I help you with? 🌱</div>
+  </div>
+</div>
+
+<div class="quick-actions">
+  <button class="quick-btn" onclick="sendQuick('Is everything in the store vegan?')">Is everything vegan?</button>
+  <button class="quick-btn" onclick="sendQuick('What are your opening hours?')">Opening hours</button>
+  <button class="quick-btn" onclick="sendQuick('How do I join the loyalty scheme?')">Loyalty scheme</button>
+  <button class="quick-btn" onclick="sendQuick('Tell me about Kindly\'s environmental impact')">Impact stats</button>
+  <button class="quick-btn" onclick="sendQuick('Surprise me with a product story!')">Surprise me!</button>
+</div>
+
+<div class="api-setup" id="api-setup">
+  <strong>Paste your Claude API key to activate Sol</strong>
+  <input type="password" id="api-key-input" placeholder="sk-ant-..." oninput="saveKey(this.value)" />
+</div>
+
+<div class="input-area">
+  <div class="image-preview" id="img-preview">
+    <img id="preview-img" src="" alt="preview" />
+    <button class="remove-img" onclick="removeImage()">×</button>
+  </div>
+  <div class="input-row">
+    <button class="attach-btn" onclick="document.getElementById('file-input').click()" title="Photograph a product">📷</button>
+    <input type="file" id="file-input" accept="image/*" capture="environment" onchange="handleImage(this)" />
+    <textarea class="text-input" id="msg-input" placeholder="Ask about any product..." rows="1"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"
+      oninput="autoResize(this)"></textarea>
+    <button class="send-btn" id="send-btn" onclick="sendMessage()">➤</button>
+  </div>
+</div>
+
+<script>
+const SYSTEM_PROMPT = `You are Sol — the in-store AI product guide for Kindly, Brighton's sustainable supermarket. You were created to make ethical shopping genuinely effortless.
+
+You have a Brighton personality — open, warm, a little passionate, zero pretension. You get genuinely excited about a really good miso paste and aren't embarrassed about it.
+
+You are knowledgeable without being preachy. You never lecture customers about their choices. You have opinions — when something is genuinely great, say so.
+
+About Kindly:
+- UK's first hybrid sustainable supermarket, founded Brighton 2019 by Shiv Misra
+- 100% plant-based, 100% single-use plastic-free, organic loose produce
+- 370,000+ plastic units diverted, 66 tonnes CO2 saved, 5.8 million litres water saved
+- 66p of every £1 stays in Brighton economy, 75% repeat customer rate
+- Partner of Team Domenica (employment for people with learning disabilities)
+- Awards: GBEA Retailer of Year 2024, Better Retailing Responsible Retailer 2025
+
+Allergen rules — non-negotiable:
+- NEVER give a flat "yes it's safe" for allergen questions
+- Always say: "For severe allergies, check the physical label and speak to staff"
+- For anaphylaxis/pregnancy/medical: give factual info then defer to GP/pharmacist
+
+Special moves:
+- Ingredient Translator: explain unfamiliar ingredients in plain English unprompted
+- Recipe Spark: suggest a simple recipe when someone scans something unfamiliar
+- Impact framing: connect products to Kindly's sustainability mission naturally
+- Swap Suggester: when asked for alternatives, name the product and where to find it
+
+Loyalty nudge: mention naturally at 3 moments — after a great answer, after an impact stat, at chat close. Never as an ad. "By the way — if you're not on the Kindly loyalty app yet, it's worth signing up."
+
+When you don't know: "I don't have that detail yet — worth asking at the till, the team will know."
+
+Tone: warm, concise, Brighton personality, never corporate, never sycophantic. Don't start with "Great question!" or "Absolutely!". If in doubt: imagine the most knowledgeable, friendliest Kindly team member. That's you.`;
+
+let apiKey = localStorage.getItem('sol_api_key') || '';
+let imageBase64 = null;
+let imageType = null;
+let messages = [];
+let isLoading = false;
+
+if (apiKey) {
+  document.getElementById('api-setup').style.display = 'none';
+  document.getElementById('api-key-input').value = apiKey;
+}
+
+function saveKey(val) {
+  apiKey = val.trim();
+  localStorage.setItem('sol_api_key', apiKey);
+  if (apiKey.length > 20) document.getElementById('api-setup').style.display = 'none';
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 100) + 'px';
+}
+
+function handleImage(input) {
+  const file = input.files[0];
+  if (!file) return;
+  imageType = file.type;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const full = e.target.result;
+    imageBase64 = full.split(',')[1];
+    document.getElementById('preview-img').src = full;
+    document.getElementById('img-preview').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function removeImage() {
+  imageBase64 = null;
+  imageType = null;
+  document.getElementById('img-preview').style.display = 'none';
+  document.getElementById('preview-img').src = '';
+}
+
+function addMessage(role, content, imgSrc) {
+  const chat = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = 'message ' + role;
+
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar ' + role;
+  avatar.textContent = role === 'sol' ? 'S' : 'Y';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'bubble ' + role;
+
+  if (imgSrc) {
+    const img = document.createElement('img');
+    img.src = imgSrc;
+    img.style.cssText = 'max-width:100%;border-radius:8px;margin-bottom:6px;display:block;';
+    bubble.appendChild(img);
+  }
+
+  if (content) {
+    const p = document.createElement('span');
+    p.textContent = content;
+    bubble.appendChild(p);
+  }
+
+  div.appendChild(avatar);
+  div.appendChild(bubble);
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function showTyping() {
+  const chat = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = 'message';
+  div.id = 'typing';
+  const avatar = document.createElement('div');
+  avatar.className = 'avatar sol';
+  avatar.textContent = 'S';
+  const indicator = document.createElement('div');
+  indicator.className = 'typing-indicator';
+  indicator.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+  div.appendChild(avatar);
+  div.appendChild(indicator);
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById('typing');
+  if (t) t.remove();
+}
+
+function sendQuick(text) {
+  document.getElementById('msg-input').value = text;
+  sendMessage();
+}
+
+async function sendMessage() {
+  if (isLoading) return;
+
+  const input = document.getElementById('msg-input');
+  const text = input.value.trim();
+  const hasImage = !!imageBase64;
+
+  if (!text && !hasImage) return;
+
+  if (!apiKey) {
+    document.getElementById('api-setup').style.display = 'block';
+    document.getElementById('api-key-input').focus();
+    return;
+  }
+
+  isLoading = true;
+  document.getElementById('send-btn').disabled = true;
+
+  const imgSrc = hasImage ? `data:${imageType};base64,${imageBase64}` : null;
+  addMessage('user', text || (hasImage ? '(photographed a product)' : ''), imgSrc);
+
+  input.value = '';
+  input.style.height = 'auto';
+  removeImage();
+
+  const userContent = [];
+  if (hasImage) {
+    userContent.push({ type: 'image', source: { type: 'base64', media_type: imageType, data: imageBase64 } });
+  }
+  if (text) {
+    userContent.push({ type: 'text', text: text });
+  } else if (hasImage) {
+    userContent.push({ type: 'text', text: 'What can you tell me about this product? Is it vegan? What are the ingredients?' });
+  }
+
+  messages.push({ role: 'user', content: userContent });
+
+  showTyping();
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: SYSTEM_PROMPT,
+        messages: messages
+      })
+    });
+
+    const data = await response.json();
+    removeTyping();
+
+    if (data.error) {
+      addMessage('sol', 'Sorry, something went wrong: ' + data.error.message + '. Check your API key.');
+    } else {
+      const reply = data.content[0].text;
+      addMessage('sol', reply);
+      messages.push({ role: 'assistant', content: reply });
+      if (messages.length > 20) messages = messages.slice(-20);
+    }
+  } catch(e) {
+    removeTyping();
+    addMessage('sol', 'Connection error — check your API key and try again.');
+  }
+
+  isLoading = false;
+  document.getElementById('send-btn').disabled = false;
+}
+</script>
+</body>
+</html>
