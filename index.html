@@ -96,7 +96,7 @@
   </div>
   <div class="input-row">
     <button class="attach-btn" onclick="document.getElementById('file-input').click()">📷</button>
-    <input type="file" id="file-input" accept="image/*" capture="environment" onchange="handleImage(this)" />
+    <input type="file" id="file-input" accept="image/*" onchange="handleImage(this)" />
     <textarea class="text-input" id="msg-input" placeholder="Ask about any product..."
       rows="1"
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"
