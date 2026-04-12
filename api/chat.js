@@ -128,7 +128,7 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
     const res = await fetch(
       `${supabaseUrl}/rest/v1/sol_products` +
       `?approved=eq.true` +
-      `&product_name=ilike.%25${term}%25` +
+      `&product_name=ilike.*${term}*` +
       `&limit=3` +
       `&select=product_name,brand,supplier,ingredients,allergens,may_contain,` +
       `free_from,vegan,organic,gluten_free,kcal,protein,carbs,fat,fibre,salt,` +
