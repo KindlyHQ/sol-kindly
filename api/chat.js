@@ -39,12 +39,18 @@ export default async function handler(req, res) {
     let productContext = '';
     let foundInDb = false;
 
+    console.log('Question received:', customerQuestion.substring(0, 80));
+    console.log('Has image:', hadImage);
+    console.log('Supabase configured:', !!supabaseUrl && !!supabaseKey);
+
     if (supabaseUrl && supabaseKey && customerQuestion && !hadImage) {
       try {
         const products = await lookupProducts(supabaseUrl, supabaseKey, customerQuestion);
+        console.log('Products found:', products ? products.length : 0);
         if (products && products.length > 0) {
           productContext = formatProductContext(products);
           foundInDb = true;
+          console.log('Using DB data for:', products[0].product_name);
         }
       } catch(e) {
         console.error('Supabase lookup error:', e.message);
@@ -100,6 +106,7 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
 
   } catch (err) {
+    console.error('Handler error:', err.message);
     return res.status(500).json({ error: 'Proxy error: ' + err.message });
   }
 }
@@ -120,31 +127,44 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
     .split(/\s+/)
     .filter(w => w.length > 2 && !stopWords.has(w));
 
-  if (terms.length === 0) return null;
+  console.log('Search terms:', JSON.stringify(terms));
 
-  // Try each term until we get results
-  // %25 is URL-encoded % — Supabase ilike wildcard requires % not *
+  if (terms.length === 0) {
+    console.log('No search terms extracted');
+    return null;
+  }
+
   for (const term of terms.slice(0, 4)) {
-    const res = await fetch(
-      `${supabaseUrl}/rest/v1/sol_products` +
+    const url = `${supabaseUrl}/rest/v1/sol_products` +
       `?approved=eq.true` +
       `&product_name=ilike.*${term}*` +
       `&limit=3` +
       `&select=product_name,brand,supplier,ingredients,allergens,may_contain,` +
       `free_from,vegan,organic,gluten_free,kcal,protein,carbs,fat,fibre,salt,` +
-      `description,origin,impact_line`,
-      {
-        headers: {
-          'apikey':        supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Range-Unit':    'items',
-          'Range':         '0-9',
-        }
-      }
-    );
+      `description,origin,impact_line`;
 
-    if (!res.ok) continue;
-    const data = await res.json();
+    console.log('Fetching:', url.substring(0, 120));
+
+    const fetchRes = await fetch(url, {
+      headers: {
+        'apikey':        supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Range-Unit':    'items',
+        'Range':         '0-9',
+      }
+    });
+
+    console.log('Supabase status:', fetchRes.status);
+
+    if (!fetchRes.ok) {
+      const errText = await fetchRes.text();
+      console.log('Supabase error body:', errText.substring(0, 200));
+      continue;
+    }
+
+    const data = await fetchRes.json();
+    console.log('Results for term "' + term + '":', data ? data.length : 0);
+
     if (data && data.length > 0) return data;
   }
 
@@ -191,20 +211,23 @@ function formatProductContext(products) {
 
 // ── Log question to Supabase ──────────────────────────────────────────────
 async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image, from_db }) {
-  await fetch(`${supabaseUrl}/rest/v1/sol_question_log`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey':        supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Prefer':        'return=minimal',
-    },
-    body: JSON.stringify({
-      question,
-      answer,
-      had_image,
-      from_db:  from_db || false,
-      asked_at: new Date().toISOString(),
-    }),
-  });
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/sol_question_log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey':        supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Prefer':        'return=minimal',
+      },
+      body: JSON.stringify({
+        question,
+        answer,
+        had_image,
+        asked_at: new Date().toISOString(),
+      }),
+    });
+  } catch(e) {
+    console.error('Log question failed:', e.message);
+  }
 }
