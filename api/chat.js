@@ -37,23 +37,36 @@ export default async function handler(req, res) {
 
     // ── Look up product data from Supabase ──────────────────────────────
     let productContext = '';
+    let foundInDb = false;
+
     if (supabaseUrl && supabaseKey && customerQuestion && !hadImage) {
       try {
         const products = await lookupProducts(supabaseUrl, supabaseKey, customerQuestion);
         if (products && products.length > 0) {
           productContext = formatProductContext(products);
+          foundInDb = true;
         }
       } catch(e) {
         console.error('Supabase lookup error:', e.message);
-        // Non-fatal — Sol still answers from training knowledge
       }
     }
 
-    // ── Inject product data into system prompt if found ─────────────────
+    // ── Build system prompt with data source instruction ────────────────
     const requestBody = { ...req.body };
-    if (productContext) {
-      const existingSystem = requestBody.system || '';
-      requestBody.system = existingSystem + '\n\n' + productContext;
+    const existingSystem = requestBody.system || '';
+
+    if (foundInDb) {
+      requestBody.system = existingSystem +
+        '\n\n' + productContext +
+        '\n\nIMPORTANT: This answer is based on verified data from the Kindly product database. ' +
+        'End your response with a new line containing exactly: ' +
+        '"📋 *From Kindly\'s product database*"';
+    } else {
+      requestBody.system = existingSystem +
+        '\n\nIMPORTANT: No specific product data was found in the Kindly database for this question. ' +
+        'Answer from your general knowledge but be appropriately cautious about specifics. ' +
+        'End your response with a new line containing exactly: ' +
+        '"💡 *General knowledge — product details may vary*"';
     }
 
     // ── Call Claude ─────────────────────────────────────────────────────
@@ -74,9 +87,14 @@ export default async function handler(req, res) {
 
     // ── Log question to Supabase (fire and forget) ──────────────────────
     if (supabaseUrl && supabaseKey && customerQuestion) {
-      logQuestion({ supabaseUrl, supabaseKey, question: customerQuestion,
-                    answer: solAnswer, had_image: hadImage })
-        .catch(err => console.error('Log error:', err));
+      logQuestion({
+        supabaseUrl,
+        supabaseKey,
+        question:  customerQuestion,
+        answer:    solAnswer,
+        had_image: hadImage,
+        from_db:   foundInDb,
+      }).catch(err => console.error('Log error:', err));
     }
 
     return res.status(200).json(data);
@@ -89,12 +107,13 @@ export default async function handler(req, res) {
 
 // ── Search Supabase for products matching the customer's question ─────────
 async function lookupProducts(supabaseUrl, supabaseKey, question) {
-  // Extract meaningful search terms from the question
-  // Remove common words and focus on product-like terms
-  const stopWords = new Set(['tell','me','about','your','is','are','the','a','an',
-    'what','how','much','does','do','have','has','i','my','for','with','in',
-    'please','can','you','pls','any','some','there','its','it','this','that',
-    'they','their','these','those','where','when','why','who']);
+  const stopWords = new Set([
+    'tell','me','about','your','is','are','the','a','an','what','how','much',
+    'does','do','have','has','i','my','for','with','in','please','can','you',
+    'pls','any','some','there','its','it','this','that','they','their','these',
+    'those','where','when','why','who','get','give','show','find','know',
+    'want','need','like','use','make','just','also','than','then','from',
+  ]);
 
   const terms = question.toLowerCase()
     .replace(/[^a-z0-9 ]/g, ' ')
@@ -103,50 +122,33 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
 
   if (terms.length === 0) return null;
 
-  // Search by product name — try up to 3 most meaningful terms
-  const searchTerm = terms.slice(0, 3).join(' & ');
-
-  const res = await fetch(
-    `${supabaseUrl}/rest/v1/sol_products?approved=eq.true` +
-    `&product_name=ilike.*${encodeURIComponent(terms[0])}*` +
-    `&limit=3&select=product_name,brand,supplier,ingredients,allergens,may_contain,` +
-    `free_from,vegan,organic,gluten_free,kcal,protein,carbs,fat,fibre,salt,` +
-    `description,origin,impact_line`,
-    {
-      headers: {
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Range-Unit': 'items',
-        'Range': '0-9',
-      }
-    }
-  );
-
-  if (!res.ok) return null;
-  const data = await res.json();
-
-  // If first term got nothing, try second term
-  if ((!data || data.length === 0) && terms.length > 1) {
-    const res2 = await fetch(
-      `${supabaseUrl}/rest/v1/sol_products?approved=eq.true` +
-      `&product_name=ilike.*${encodeURIComponent(terms[1])}*` +
-      `&limit=3&select=product_name,brand,supplier,ingredients,allergens,may_contain,` +
+  // Try each term until we get results
+  // %25 is URL-encoded % — Supabase ilike wildcard requires % not *
+  for (const term of terms.slice(0, 4)) {
+    const res = await fetch(
+      `${supabaseUrl}/rest/v1/sol_products` +
+      `?approved=eq.true` +
+      `&product_name=ilike.%25${term}%25` +
+      `&limit=3` +
+      `&select=product_name,brand,supplier,ingredients,allergens,may_contain,` +
       `free_from,vegan,organic,gluten_free,kcal,protein,carbs,fat,fibre,salt,` +
       `description,origin,impact_line`,
       {
         headers: {
-          'apikey': supabaseKey,
+          'apikey':        supabaseKey,
           'Authorization': `Bearer ${supabaseKey}`,
-          'Range-Unit': 'items',
-          'Range': '0-9',
+          'Range-Unit':    'items',
+          'Range':         '0-9',
         }
       }
     );
-    if (!res2.ok) return null;
-    return await res2.json();
+
+    if (!res.ok) continue;
+    const data = await res.json();
+    if (data && data.length > 0) return data;
   }
 
-  return data;
+  return null;
 }
 
 
@@ -154,45 +156,54 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
 function formatProductContext(products) {
   if (!products || products.length === 0) return '';
 
-  const lines = ['KINDLY PRODUCT DATA FROM KNOWLEDGE BASE — use this for your answer:'];
+  const lines = [
+    'VERIFIED KINDLY PRODUCT DATA — answer from this data, not general knowledge:',
+  ];
 
   for (const p of products) {
     lines.push(`\nProduct: ${p.product_name}${p.brand ? ' by ' + p.brand : ''}`);
-    if (p.supplier)     lines.push(`Supplier: ${p.supplier}`);
-    if (p.ingredients)  lines.push(`Ingredients: ${p.ingredients}`);
-    if (p.allergens)    lines.push(`Allergens: ${p.allergens}`);
+    if (p.supplier)    lines.push(`Supplier: ${p.supplier}`);
+    if (p.ingredients) lines.push(`Ingredients: ${p.ingredients}`);
+    if (p.allergens)   lines.push(`Allergens: ${p.allergens}`);
     if (p.may_contain && p.may_contain.trim())
-                        lines.push(`May contain: ${p.may_contain}`);
-    if (p.free_from)    lines.push(`Free from: ${p.free_from}`);
-    if (p.vegan)        lines.push(`Vegan: ${p.vegan}`);
-    if (p.organic)      lines.push(`Organic: ${p.organic}`);
-    if (p.gluten_free)  lines.push(`Gluten free: ${p.gluten_free}`);
-    if (p.kcal)         lines.push(`Nutrition per 100g: ${p.kcal} kcal${p.protein ? ', protein ' + p.protein + 'g' : ''}${p.carbs ? ', carbs ' + p.carbs + 'g' : ''}${p.fat ? ', fat ' + p.fat + 'g' : ''}${p.fibre ? ', fibre ' + p.fibre + 'g' : ''}${p.salt ? ', salt ' + p.salt + 'g' : ''}`);
-    if (p.description)  lines.push(`Description: ${p.description}`);
-    if (p.origin)       lines.push(`Origin: ${p.origin}`);
-    if (p.impact_line)  lines.push(`Impact: ${p.impact_line}`);
+                       lines.push(`May contain: ${p.may_contain}`);
+    if (p.free_from)   lines.push(`Free from: ${p.free_from}`);
+    if (p.vegan)       lines.push(`Vegan: ${p.vegan}`);
+    if (p.organic)     lines.push(`Organic: ${p.organic}`);
+    if (p.gluten_free) lines.push(`Gluten free: ${p.gluten_free}`);
+    if (p.kcal) {
+      let nutrition = `Nutrition per 100g: ${p.kcal} kcal`;
+      if (p.protein) nutrition += `, protein ${p.protein}g`;
+      if (p.carbs)   nutrition += `, carbs ${p.carbs}g`;
+      if (p.fat)     nutrition += `, fat ${p.fat}g`;
+      if (p.fibre)   nutrition += `, fibre ${p.fibre}g`;
+      if (p.salt)    nutrition += `, salt ${p.salt}g`;
+      lines.push(nutrition);
+    }
+    if (p.description) lines.push(`Description: ${p.description}`);
+    if (p.origin)      lines.push(`Origin: ${p.origin}`);
+    if (p.impact_line) lines.push(`Impact: ${p.impact_line}`);
   }
-
-  lines.push('\nAnswer using the above data. Quote specific figures where relevant. If the question is about a product NOT in this data, say you do not have the full details yet.');
 
   return lines.join('\n');
 }
 
 
 // ── Log question to Supabase ──────────────────────────────────────────────
-async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image }) {
+async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image, from_db }) {
   await fetch(`${supabaseUrl}/rest/v1/sol_question_log`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'apikey': supabaseKey,
+      'apikey':        supabaseKey,
       'Authorization': `Bearer ${supabaseKey}`,
-      'Prefer': 'return=minimal',
+      'Prefer':        'return=minimal',
     },
     body: JSON.stringify({
       question,
       answer,
       had_image,
+      from_db:  from_db || false,
       asked_at: new Date().toISOString(),
     }),
   });
