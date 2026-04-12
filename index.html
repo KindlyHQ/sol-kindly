@@ -38,6 +38,7 @@
   .quick-actions { padding:0 16px 8px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none; }
   .quick-actions::-webkit-scrollbar{display:none}
   .quick-btn { white-space:nowrap;padding:6px 12px;border-radius:16px;border:1px solid #ffb3c8;background:white;color:#ff0054;font-size:12px;cursor:pointer;flex-shrink:0; }
+  .quick-btn.refill { border: 2px solid #ff0054; font-weight: 600; }
   .quick-btn:hover{background:#fff0f5}
   .input-area { padding:12px 16px 20px;background:white;border-top:0.5px solid #ffe0e8;display:flex;flex-direction:column;gap:8px; }
   .image-preview { display:none;position:relative;width:fit-content; }
@@ -68,7 +69,7 @@
 </div>
 
 <div class="impact-banner">
-  <div class="impact-stat"><div class="num">325K+</div><div class="lbl">plastics diverted</div></div>
+  <div class="impact-stat"><div class="num">370K+</div><div class="lbl">plastics diverted</div></div>
   <div class="impact-stat"><div class="num">66t</div><div class="lbl">CO₂ saved</div></div>
   <div class="impact-stat"><div class="num">66p</div><div class="lbl">stays in Brighton</div></div>
   <div class="impact-stat"><div class="num">75%</div><div class="lbl">return customers</div></div>
@@ -77,16 +78,15 @@
 <div class="chat-area" id="chat">
   <div class="message">
     <div class="avatar sol">S</div>
-    <div class="bubble sol">Hi! I'm Sol — Kindly's product guide. Photograph any product or ask me anything about what's in the shop. What can I help you with? 🌱</div>
+    <div class="bubble sol">Hi! I'm Sol. Photograph a product label, a refill bin code, or ask me anything. What are we looking at today? 🌱</div>
   </div>
 </div>
 
 <div class="quick-actions">
+  <button class="quick-btn refill" onclick="triggerRefillScan()">🏺 Scan Refill Bin</button>
   <button class="quick-btn" onclick="sendQuick('Is everything in the store vegan?')">Is everything vegan?</button>
   <button class="quick-btn" onclick="sendQuick('What are your opening hours?')">Opening hours</button>
   <button class="quick-btn" onclick="sendQuick('Tell me about the loyalty scheme')">Loyalty scheme</button>
-  <button class="quick-btn" onclick="sendQuick('Tell me about Kindly\'s environmental impact')">Our impact</button>
-  <button class="quick-btn" onclick="sendQuick('Surprise me with a product story!')">Surprise me!</button>
 </div>
 
 <div class="input-area">
@@ -106,58 +106,39 @@
 </div>
 
 <script>
-const SYSTEM_PROMPT = `You are Sol — the in-store AI guide for Kindly, Brighton's sustainable supermarket.
+const SYSTEM_PROMPT = `You are Sol — the AI guide for Kindly Brighton. 
+Keep answers SHORT (2-4 sentences).
 
-RESPONSE LENGTH — CRITICAL RULE:
-Keep answers SHORT. 2-4 sentences maximum. Customers are standing in a shop. No bullet-point lists unless specifically asked. Lead with the most useful fact, then stop.
+MULTI-SCENARIO RULES:
+1. REFILL BINS: If you see a 4-digit code (e.g., 1038), it is a refill. Prioritize ingredients and origin from the database.
+2. SHELF VIEW: If the photo shows many items, focus on the one in the center. If unsure, ask which one they mean.
+3. DELI POTS: For fresh items (curries/salads), read the label in the photo directly if the database doesn't have the specific batch info.
+4. ALLERGENS: Never say "it's safe." Always say: "Check the physical label and ask staff to be certain."
 
-TONE & CHARACTER:
-- You have genuine opinions. If something is exceptional, say so.
-- Brighton personality — a little passionate, never corporate.
-- Use the Ingredient Translator: when you spot an unfamiliar ingredient, explain it in plain English unprompted.
-- Use Recipe Spark: when someone scans something they might not know how to use, suggest one simple recipe in 2-3 lines.
-- Provenance Pride: when a product has a great origin story, share it with enthusiasm.
-- Swap Suggester: when asked for an alternative, name the product and roughly where in the store to find it.
-
-Personality: warm, Brighton, genuinely knowledgeable, zero pretension. Never preachy. Never start with "Great question!" or "Absolutely!".
-
-About Kindly:
-- UK's first hybrid sustainable supermarket, Brighton 2019, founded by Shiv Misra
-- 100% plant-based, 100% single-use plastic-free, organic loose produce
-- 370,000+ plastics diverted, 66t CO₂ saved, 5.8M litres water saved
-- 66p of every £1 stays in the Brighton economy, 75% repeat customers
-
-OPENING HOURS — answer exactly like this when asked:
-York Place
-Mon–Sat  8:00am – 8:00pm
-Sunday  10:00am – 7:00pm
-
-Dyke Road
-Mon–Thu  9:00am – 8:00pm
-Fri-Sat  9:00am - 7:00pm
-Sunday  10:00am – 7:00pm
-
-LOYALTY SCHEME:
-Kindly uses LoyalZoo. Every £1 spent earns points redeemable for discounts. Sign up at the till — takes 30 seconds. When relevant, mention it warmly as a genuine tip: "By the way, the Kindly loyalty scheme is worth signing up for — every £1 adds up and the team can sort it at the till in 30 seconds."
-
-ALLERGEN RULES — NON-NEGOTIABLE:
-Never say "yes it's safe" outright. Always add: "For severe allergies, check the physical label and speak to staff — they'll know."
-
-When you don't know: "I don't have that detail yet — worth asking at the till."`;
+LOYALTY: LoyalZoo, £1 = 1pt. Signup at till.
+OPENING HOURS: 
+York Place: M-F 8-8, Sat 9-7, Sun 10-5. 
+Dyke Road: M-Sat 9-6, Sun 10-4.`;
 
 let imageBase64 = null;
 let imageType = null;
 let messages = [];
 let isLoading = false;
+let isRefillIntent = false;
 
 function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 
+function triggerRefillScan() {
+    isRefillIntent = true;
+    document.getElementById('file-input').click();
+}
+
 function normaliseMimeType(type) {
   if (!type) return 'image/jpeg';
-  const map = { 'image/jpg':'image/jpeg','image/JPG':'image/jpeg','image/JPEG':'image/jpeg','image/PNG':'image/png','image/GIF':'image/gif','image/WEBP':'image/webp' };
+  const map = { 'image/jpg':'image/jpeg','image/JPG':'image/jpeg','image/JPEG':'image/jpeg','image/PNG':'image/png' };
   return map[type] || type;
 }
 
@@ -170,6 +151,10 @@ function handleImage(input) {
     imageBase64 = e.target.result.split(',')[1];
     document.getElementById('preview-img').src = e.target.result;
     document.getElementById('img-preview').style.display = 'block';
+    if (isRefillIntent) {
+        document.getElementById('msg-input').value = "Tell me about this refill product code.";
+        isRefillIntent = false;
+    }
   };
   reader.readAsDataURL(file);
   input.value = '';
@@ -235,7 +220,7 @@ async function sendMessage() {
   isLoading = true;
   document.getElementById('send-btn').disabled = true;
 
-  addMessage('user', text || '(photographed a product)', hasImage ? `data:${imageType};base64,${imageBase64}` : null);
+  addMessage('user', text || '(Photo upload)', hasImage ? `data:${imageType};base64,${imageBase64}` : null);
   input.value = ''; input.style.height = 'auto';
 
   const storedImg = imageBase64, storedType = imageType;
@@ -243,7 +228,7 @@ async function sendMessage() {
 
   const userContent = [];
   if (hasImage) userContent.push({ type:'image', source:{ type:'base64', media_type:storedType, data:storedImg } });
-  userContent.push({ type:'text', text: text || 'What can you tell me about this product? Is it vegan? Any allergens?' });
+  userContent.push({ type:'text', text: text || 'What product is this? Tell me the ingredients and if it is vegan.' });
 
   messages.push({ role:'user', content:userContent });
   showTyping();
@@ -253,7 +238,7 @@ async function sendMessage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: 'claude-3-haiku-20240307',
         max_tokens: 400,
         system: SYSTEM_PROMPT,
         messages: messages
@@ -264,17 +249,16 @@ async function sendMessage() {
     removeTyping();
 
     if (data.error) {
-      addMessage('sol', 'Something went wrong — please try again.');
-      console.error('API error:', data.error);
+      addMessage('sol', 'I hit a snag. Try again?');
     } else {
       const reply = data.content[0].text;
       addMessage('sol', reply);
       messages.push({ role:'assistant', content:reply });
-      if (messages.length > 20) messages = messages.slice(-20);
+      if (messages.length > 10) messages = messages.slice(-10);
     }
   } catch(e) {
     removeTyping();
-    addMessage('sol', 'Connection error — please try again in a moment.');
+    addMessage('sol', 'Connection issue. One more try?');
   }
 
   isLoading = false;
