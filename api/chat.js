@@ -39,25 +39,24 @@ export default async function handler(req, res) {
     let productContext = '';
     let foundInDb = false;
 
-    console.log('Question received:', customerQuestion.substring(0, 80));
-    console.log('Has image:', hadImage);
-    console.log('Supabase configured:', !!supabaseUrl && !!supabaseKey);
+    console.log('Question:', customerQuestion.substring(0, 80));
 
     if (supabaseUrl && supabaseKey && customerQuestion && !hadImage) {
       try {
         const products = await lookupProducts(supabaseUrl, supabaseKey, customerQuestion);
-        console.log('Products found:', products ? products.length : 0);
         if (products && products.length > 0) {
           productContext = formatProductContext(products);
           foundInDb = true;
-          console.log('Using DB data for:', products[0].product_name);
+          console.log('DB hit:', products[0].product_name);
+        } else {
+          console.log('No DB match');
         }
       } catch(e) {
         console.error('Supabase lookup error:', e.message);
       }
     }
 
-    // ── Build system prompt with data source instruction ────────────────
+    // ── Build system prompt ─────────────────────────────────────────────
     const requestBody = { ...req.body };
     const existingSystem = requestBody.system || '';
 
@@ -91,16 +90,11 @@ export default async function handler(req, res) {
 
     const solAnswer = data.content?.[0]?.text || '';
 
-    // ── Log question to Supabase (fire and forget) ──────────────────────
+    // ── Log question ────────────────────────────────────────────────────
     if (supabaseUrl && supabaseKey && customerQuestion) {
-      logQuestion({
-        supabaseUrl,
-        supabaseKey,
-        question:  customerQuestion,
-        answer:    solAnswer,
-        had_image: hadImage,
-        from_db:   foundInDb,
-      }).catch(err => console.error('Log error:', err));
+      logQuestion({ supabaseUrl, supabaseKey, question: customerQuestion,
+                    answer: solAnswer, had_image: hadImage })
+        .catch(err => console.error('Log error:', err));
     }
 
     return res.status(200).json(data);
@@ -112,7 +106,7 @@ export default async function handler(req, res) {
 }
 
 
-// ── Search Supabase for products matching the customer's question ─────────
+// ── Product lookup — phrase-first, then specific terms ────────────────────
 async function lookupProducts(supabaseUrl, supabaseKey, question) {
   const stopWords = new Set([
     'tell','me','about','your','is','are','the','a','an','what','how','much',
@@ -120,21 +114,31 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
     'pls','any','some','there','its','it','this','that','they','their','these',
     'those','where','when','why','who','get','give','show','find','know',
     'want','need','like','use','make','just','also','than','then','from',
+    'organic', // too generic — skip as standalone search term
   ]);
 
-  const terms = question.toLowerCase()
+  // Words that are too generic to search on their own
+  const genericWords = new Set([
+    'seeds','beans','nuts','flakes','flour','rice','oats','mix','blend',
+    'powder','oil','sauce','paste','spread','butter','milk','cream','bits',
+    'pieces','whole','ground','raw','roasted','dried','fresh',
+  ]);
+
+  const allTerms = question.toLowerCase()
     .replace(/[^a-z0-9 ]/g, ' ')
     .split(/\s+/)
     .filter(w => w.length > 2 && !stopWords.has(w));
 
-  console.log('Search terms:', JSON.stringify(terms));
+  if (allTerms.length === 0) return null;
 
-  if (terms.length === 0) {
-    console.log('No search terms extracted');
-    return null;
-  }
+  // Specific terms — exclude generic standalone words unless no other option
+  const specificTerms = allTerms.filter(w => !genericWords.has(w));
+  const searchTerms   = specificTerms.length > 0 ? specificTerms : allTerms;
 
-  for (const term of terms.slice(0, 4)) {
+  console.log('All terms:', allTerms);
+  console.log('Search terms (specific):', searchTerms);
+
+  const supabaseQuery = async (term) => {
     const url = `${supabaseUrl}/rest/v1/sol_products` +
       `?approved=eq.true` +
       `&product_name=ilike.*${term}*` +
@@ -143,29 +147,55 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
       `free_from,vegan,organic,gluten_free,kcal,protein,carbs,fat,fibre,salt,` +
       `description,origin,impact_line`;
 
-    console.log('Fetching:', url.substring(0, 120));
-
-    const fetchRes = await fetch(url, {
+    const r = await fetch(url, {
       headers: {
-        'apikey':        supabaseKey,
+        'apikey': supabaseKey,
         'Authorization': `Bearer ${supabaseKey}`,
-        'Range-Unit':    'items',
-        'Range':         '0-9',
+        'Range-Unit': 'items',
+        'Range': '0-9',
       }
     });
 
-    console.log('Supabase status:', fetchRes.status);
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data && data.length > 0 ? data : null;
+  };
 
-    if (!fetchRes.ok) {
-      const errText = await fetchRes.text();
-      console.log('Supabase error body:', errText.substring(0, 200));
-      continue;
+  // Strategy 1: try 2-word phrase (most precise)
+  if (searchTerms.length >= 2) {
+    const phrase = searchTerms.slice(0, 2).join('+');
+    // Use full text search with two terms combined
+    const url2 = `${supabaseUrl}/rest/v1/sol_products` +
+      `?approved=eq.true` +
+      `&product_name=ilike.*${searchTerms[0]}*` +
+      `&product_name=ilike.*${searchTerms[1]}*` +
+      `&limit=3` +
+      `&select=product_name,brand,supplier,ingredients,allergens,may_contain,` +
+      `free_from,vegan,organic,gluten_free,kcal,protein,carbs,fat,fibre,salt,` +
+      `description,origin,impact_line`;
+
+    const r2 = await fetch(url2, {
+      headers: {
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+      }
+    });
+    if (r2.ok) {
+      const d2 = await r2.json();
+      if (d2 && d2.length > 0) {
+        console.log('Phrase match:', d2[0].product_name);
+        return d2;
+      }
     }
+  }
 
-    const data = await fetchRes.json();
-    console.log('Results for term "' + term + '":', data ? data.length : 0);
-
-    if (data && data.length > 0) return data;
+  // Strategy 2: most specific single term
+  for (const term of searchTerms.slice(0, 3)) {
+    const result = await supabaseQuery(term);
+    if (result) {
+      console.log('Single term match for "' + term + '":', result[0].product_name);
+      return result;
+    }
   }
 
   return null;
@@ -176,9 +206,7 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
 function formatProductContext(products) {
   if (!products || products.length === 0) return '';
 
-  const lines = [
-    'VERIFIED KINDLY PRODUCT DATA — answer from this data, not general knowledge:',
-  ];
+  const lines = ['VERIFIED KINDLY PRODUCT DATA — answer from this data:'];
 
   for (const p of products) {
     lines.push(`\nProduct: ${p.product_name}${p.brand ? ' by ' + p.brand : ''}`);
@@ -192,13 +220,13 @@ function formatProductContext(products) {
     if (p.organic)     lines.push(`Organic: ${p.organic}`);
     if (p.gluten_free) lines.push(`Gluten free: ${p.gluten_free}`);
     if (p.kcal) {
-      let nutrition = `Nutrition per 100g: ${p.kcal} kcal`;
-      if (p.protein) nutrition += `, protein ${p.protein}g`;
-      if (p.carbs)   nutrition += `, carbs ${p.carbs}g`;
-      if (p.fat)     nutrition += `, fat ${p.fat}g`;
-      if (p.fibre)   nutrition += `, fibre ${p.fibre}g`;
-      if (p.salt)    nutrition += `, salt ${p.salt}g`;
-      lines.push(nutrition);
+      let n = `Nutrition per 100g: ${p.kcal} kcal`;
+      if (p.protein) n += `, protein ${p.protein}g`;
+      if (p.carbs)   n += `, carbs ${p.carbs}g`;
+      if (p.fat)     n += `, fat ${p.fat}g`;
+      if (p.fibre)   n += `, fibre ${p.fibre}g`;
+      if (p.salt)    n += `, salt ${p.salt}g`;
+      lines.push(n);
     }
     if (p.description) lines.push(`Description: ${p.description}`);
     if (p.origin)      lines.push(`Origin: ${p.origin}`);
@@ -209,8 +237,8 @@ function formatProductContext(products) {
 }
 
 
-// ── Log question to Supabase ──────────────────────────────────────────────
-async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image, from_db }) {
+// ── Log question ──────────────────────────────────────────────────────────
+async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image }) {
   try {
     await fetch(`${supabaseUrl}/rest/v1/sol_question_log`, {
       method: 'POST',
@@ -220,14 +248,9 @@ async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_ima
         'Authorization': `Bearer ${supabaseKey}`,
         'Prefer':        'return=minimal',
       },
-      body: JSON.stringify({
-        question,
-        answer,
-        had_image,
-        asked_at: new Date().toISOString(),
-      }),
+      body: JSON.stringify({ question, answer, had_image, asked_at: new Date().toISOString() }),
     });
   } catch(e) {
-    console.error('Log question failed:', e.message);
+    console.error('Log failed:', e.message);
   }
 }
