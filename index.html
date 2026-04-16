@@ -27,7 +27,7 @@
   .avatar { width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600; }
   .avatar.sol { background:#ff0054;color:white; }
   .avatar.user { background:#e8f0eb;color:#4A7C59; }
-  .bubble { max-width:82%;padding:10px 14px;border-radius:18px;font-size:14px;line-height:1.55; }
+  .bubble { max-width:82%;padding:10px 14px;border-radius:18px;font-size:14px;line-height:1.6; }
   .bubble.sol { background:white;border:0.5px solid #ffe0e8;border-bottom-left-radius:4px;color:#1a0a0f; }
   .bubble.user { background:#ff0054;color:white;border-bottom-right-radius:4px; }
   .typing-indicator { display:flex;gap:4px;padding:14px;background:white;border:0.5px solid #ffe0e8;border-radius:18px;border-bottom-left-radius:4px;width:fit-content; }
@@ -39,7 +39,6 @@
   .quick-actions::-webkit-scrollbar{display:none}
   .quick-btn { white-space:nowrap;padding:6px 12px;border-radius:16px;border:1px solid #ffb3c8;background:white;color:#ff0054;font-size:12px;cursor:pointer;flex-shrink:0; }
   .quick-btn.refill { border: 2px solid #ff0054; font-weight: 600; }
-  .quick-btn:hover{background:#fff0f5}
   .input-area { padding:12px 16px 20px;background:white;border-top:0.5px solid #ffe0e8;display:flex;flex-direction:column;gap:8px; }
   .image-preview { display:none;position:relative;width:fit-content; }
   .image-preview img { max-height:80px;border-radius:8px;border:1px solid #ffe0e8; }
@@ -47,9 +46,7 @@
   .input-row { display:flex;gap:8px;align-items:flex-end; }
   .attach-btn { width:40px;height:40px;border-radius:50%;border:1px solid #ffb3c8;background:white;color:#ff0054;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0; }
   .text-input { flex:1;padding:10px 14px;border-radius:20px;border:1px solid #ffb3c8;font-size:14px;outline:none;resize:none;max-height:100px;line-height:1.4;font-family:inherit;background:#fff8f5; }
-  .text-input:focus{border-color:#ff0054;background:white}
   .send-btn { width:40px;height:40px;border-radius:50%;border:none;background:#ff0054;color:white;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0; }
-  .send-btn:disabled{opacity:0.4;cursor:not-allowed}
   #file-input{display:none}
   .impact-banner { margin:0 16px 4px;background:#fff0f5;border:0.5px solid #ffb3c8;border-radius:12px;padding:10px 14px;display:flex;gap:12px;overflow-x:auto;scrollbar-width:none; }
   .impact-stat{text-align:center;flex-shrink:0}
@@ -63,7 +60,7 @@
   <div class="header-icon">☀️</div>
   <div class="header-text">
     <h1>Sol</h1>
-    <p>Kindly Brighton · Product Guide</p>
+    <p>Kindly Brighton · AI Guide</p>
   </div>
   <div class="status-dot"></div>
 </div>
@@ -78,7 +75,7 @@
 <div class="chat-area" id="chat">
   <div class="message">
     <div class="avatar sol">S</div>
-    <div class="bubble sol">Hi! I'm Sol. Photograph a product label, a refill bin code, or ask me anything. What can I help you with? 🌱</div>
+    <div class="bubble sol">Hi! I'm Sol. Photograph a product, scan a refill code, or ask me anything. What's on your list today? 🌱</div>
   </div>
 </div>
 
@@ -86,7 +83,7 @@
   <button class="quick-btn refill" onclick="triggerRefillScan()">🏺 Scan Refill Bin</button>
   <button class="quick-btn" onclick="sendQuick('Is everything in the store vegan?')">Is everything vegan?</button>
   <button class="quick-btn" onclick="sendQuick('What are your opening hours?')">Opening hours</button>
-  <button class="quick-btn" onclick="sendQuick('Tell me about the loyalty scheme')">Loyalty rewards</button>
+  <button class="quick-btn" onclick="sendQuick('Tell me about your loyalty rewards')">Loyalty Rewards</button>
 </div>
 
 <div class="input-area">
@@ -106,14 +103,15 @@
 </div>
 
 <script>
+// UPDATED PROMPT FOR CLEANER HOURS AND EXCITING LOYALTY
 const SYSTEM_PROMPT = `You are Sol — the friendly, planet-passionate AI guide for Kindly Brighton.
 
 FORMATTING RULES:
-- Use bullet points for lists (Hours/Rewards).
-- Use bold text for emphasis.
-- Keep answers SHORT (2-4 sentences).
+- Use bullet points (•) for all lists.
+- ALWAYS use new lines for each store and each day's hours.
+- Use bold text for store names and reward amounts.
 
-OPENING HOURS (Structure strictly like this):
+OPENING HOURS:
 **York Place**
 • Mon–Sat: 8am – 8pm
 • Sunday: 10am – 7pm
@@ -123,16 +121,11 @@ OPENING HOURS (Structure strictly like this):
 • Fri–Sat: 9am – 7pm
 • Sunday: 10am – 7pm
 
-LOYALTY SCHEME (LoyalZoo):
-Every pound you spend at Kindly is a vote for a plastic-free future. Why not get rewarded for it? Join our community to earn points on every shop:
-- **250 points** = **£5 OFF**
-- **500 points** = **£10 OFF**
-Sign up takes 30 seconds at the till, or [click here to join the revolution](https://link-to-be-confirmed.com).
-
-MULTI-SCENARIO RULES:
-1. REFILL BINS: If you see a 4-digit code (e.g., 1038), focus on that match.
-2. SHELF VIEW: Identify the specific product in the center.
-3. ALLERGENS: Never say "it's safe". Always say: "Check the physical label and ask staff to be certain."`;
+LOYALTY REWARDS:
+Every shop you do at Kindly helps the planet—why not get rewarded for it? Join our community and turn your plastic-free votes into treats:
+• **250 points** = **£5 OFF**
+• **500 points** = **£10 OFF**
+It takes 30 seconds at the till, or [click here to join the revolution](https://link-to-be-confirmed.com)! Ready to start earning?`;
 
 let imageBase64 = null;
 let imageType = null;
@@ -150,34 +143,25 @@ function triggerRefillScan() {
     document.getElementById('file-input').click();
 }
 
-function normaliseMimeType(type) {
-  if (!type) return 'image/jpeg';
-  const map = { 'image/jpg':'image/jpeg','image/JPG':'image/jpeg','image/JPEG':'image/jpeg','image/PNG':'image/png' };
-  return map[type] || type;
-}
-
 function handleImage(input) {
   const file = input.files[0];
   if (!file) return;
-  imageType = normaliseMimeType(file.type || 'image/jpeg');
   const reader = new FileReader();
   reader.onload = e => {
     imageBase64 = e.target.result.split(',')[1];
     document.getElementById('preview-img').src = e.target.result;
     document.getElementById('img-preview').style.display = 'block';
     if (isRefillIntent) {
-        document.getElementById('msg-input').value = "Tell me about this refill product code.";
+        document.getElementById('msg-input').value = "Tell me about this refill bin.";
         isRefillIntent = false;
     }
   };
   reader.readAsDataURL(file);
-  input.value = '';
 }
 
 function removeImage() {
-  imageBase64 = null; imageType = null;
+  imageBase64 = null;
   document.getElementById('img-preview').style.display = 'none';
-  document.getElementById('preview-img').src = '';
 }
 
 function addMessage(role, content, imgSrc) {
@@ -187,19 +171,25 @@ function addMessage(role, content, imgSrc) {
   const avatar = document.createElement('div');
   avatar.className = 'avatar ' + role;
   avatar.textContent = role === 'sol' ? 'S' : 'Y';
+  
   const bubble = document.createElement('div');
   bubble.className = 'bubble ' + role;
+  
   if (imgSrc) {
     const img = document.createElement('img');
     img.src = imgSrc;
     img.style.cssText = 'max-width:100%;border-radius:8px;margin-bottom:6px;display:block;';
     bubble.appendChild(img);
   }
+  
   if (content) {
-    const span = document.createElement('span');
-    span.innerHTML = content.replace(/\n/g, '<br>');
-    bubble.appendChild(span);
+    // CRITICAL: This replaces markdown-style line breaks with HTML breaks
+    const formattedContent = content
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n/g, '<br>');
+    bubble.innerHTML += formattedContent;
   }
+  
   div.appendChild(avatar);
   div.appendChild(bubble);
   chat.appendChild(div);
@@ -234,15 +224,15 @@ async function sendMessage() {
   isLoading = true;
   document.getElementById('send-btn').disabled = true;
 
-  addMessage('user', text || '(Photo upload)', hasImage ? `data:${imageType};base64,${imageBase64}` : null);
+  addMessage('user', text || '(Photo upload)', hasImage ? `data:image/jpeg;base64,${imageBase64}` : null);
   input.value = ''; input.style.height = 'auto';
 
-  const storedImg = imageBase64, storedType = imageType;
+  const storedImg = imageBase64;
   removeImage();
 
   const userContent = [];
-  if (hasImage) userContent.push({ type:'image', source:{ type:'base64', media_type:storedType, data:storedImg } });
-  userContent.push({ type:'text', text: text || 'Tell me about this product.' });
+  if (hasImage) userContent.push({ type:'image', source:{ type:'base64', media_type:'image/jpeg', data:storedImg } });
+  userContent.push({ type:'text', text: text || 'Tell me about this.' });
 
   messages.push({ role:'user', content:userContent });
   showTyping();
@@ -251,24 +241,18 @@ async function sendMessage() {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        max_tokens: 400,
-        system: SYSTEM_PROMPT,
-        messages: messages
-      })
+      body: JSON.stringify({ model: 'claude-3-haiku-20240307', max_tokens: 400, system: SYSTEM_PROMPT, messages: messages })
     });
 
     const data = await response.json();
     removeTyping();
 
     if (data.error) {
-      addMessage('sol', 'I hit a snag. Try again?');
+      addMessage('sol', 'I hit a snag. One more try?');
     } else {
       const reply = data.content[0].text;
       addMessage('sol', reply);
       messages.push({ role:'assistant', content:reply });
-      if (messages.length > 10) messages = messages.slice(-10);
     }
   } catch(e) {
     removeTyping();
