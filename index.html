@@ -110,7 +110,7 @@ FORMATTING RULES:
 - ALWAYS use new lines for each store and each day's hours.
 - Use bold text for emphasis.
 
-OPENING HOURS (Structure strictly like this):
+OPENING HOURS:
 **York Place**
 • Mon–Sat: 8am – 8pm
 • Sunday: 10am – 7pm
@@ -123,16 +123,15 @@ OPENING HOURS (Structure strictly like this):
 LOYALTY REWARDS (USE THIS EXACT TEXT):
 Every shop at Kindly is a vote for a plastic-free future—why not get rewarded for it? 🌍
 
-Join our community and turn your planet-positive choices into treats:
+Join our community and turn your planet-positive choices into treats. **Every £1 you spend earns you 1 point.** Check out the rewards:
 • **250 points** = **£5 OFF** your shop
 • **500 points** = **£10 OFF** your shop
 
-It takes just 30 seconds at the till, or you can **[click here to join the revolution and start earning now!](https://link-to-be-confirmed.com)**. Ready to make your shop count?
+Sign up takes just 30 seconds at the till, or you can **[click here to join the revolution and start earning now!](https://link-to-be-confirmed.com)**. Ready to make your shop count?
 
 MULTI-SCENARIO RULES:
 1. REFILL BINS: If you see a 4-digit code (e.g., 1038), it is a refill. Prioritize database info.
-2. SHELF VIEW: Focus on the item in the center. If unsure, ask for clarification.
-3. ALLERGENS: Never say "it's safe." Always say: "Check the physical label and ask staff to be certain."`;
+2. ALLERGENS: Never say "it's safe." Always say: "Check the physical label and ask staff to be certain."`;
 
 let imageBase64 = null;
 let imageType = null;
@@ -191,11 +190,11 @@ function addMessage(role, content, imgSrc) {
   }
   
   if (content) {
-    // Standard markdown formatting replacement
-    let formattedContent = content
+    // Formatting: Bold text and Line breaks
+    let formatted = content
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\n/g, '<br>');
-    bubble.innerHTML += formattedContent;
+    bubble.innerHTML += formatted;
   }
   
   div.appendChild(avatar);
@@ -249,7 +248,12 @@ async function sendMessage() {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-3-haiku-20240307', max_tokens: 400, system: SYSTEM_PROMPT, messages: messages })
+      body: JSON.stringify({ 
+        model: 'claude-3-haiku-20240307', 
+        max_tokens: 400, 
+        system: SYSTEM_PROMPT, 
+        messages: messages 
+      })
     });
 
     const data = await response.json();
