@@ -78,7 +78,7 @@
 <div class="chat-area" id="chat">
   <div class="message">
     <div class="avatar sol">S</div>
-    <div class="bubble sol">Hi! I'm Sol. Photograph a product label, a refill bin code, or ask me anything. What are we looking at today? 🌱</div>
+    <div class="bubble sol">Hi! I'm Sol. Photograph a product label, a refill bin code, or ask me anything. What can I help you with? 🌱</div>
   </div>
 </div>
 
@@ -86,7 +86,7 @@
   <button class="quick-btn refill" onclick="triggerRefillScan()">🏺 Scan Refill Bin</button>
   <button class="quick-btn" onclick="sendQuick('Is everything in the store vegan?')">Is everything vegan?</button>
   <button class="quick-btn" onclick="sendQuick('What are your opening hours?')">Opening hours</button>
-  <button class="quick-btn" onclick="sendQuick('Tell me about the loyalty scheme')">Loyalty scheme</button>
+  <button class="quick-btn" onclick="sendQuick('Tell me about the loyalty scheme')">Loyalty rewards</button>
 </div>
 
 <div class="input-area">
@@ -106,19 +106,33 @@
 </div>
 
 <script>
-const SYSTEM_PROMPT = `You are Sol — the AI guide for Kindly Brighton. 
-Keep answers SHORT (2-4 sentences).
+const SYSTEM_PROMPT = `You are Sol — the friendly, planet-passionate AI guide for Kindly Brighton.
+
+FORMATTING RULES:
+- Use bullet points for lists (Hours/Rewards).
+- Use bold text for emphasis.
+- Keep answers SHORT (2-4 sentences).
+
+OPENING HOURS (Structure strictly like this):
+**York Place**
+• Mon–Sat: 8am – 8pm
+• Sunday: 10am – 7pm
+
+**Dyke Road**
+• Mon–Thu: 9am – 8pm
+• Fri–Sat: 9am – 7pm
+• Sunday: 10am – 7pm
+
+LOYALTY SCHEME (LoyalZoo):
+Every pound you spend at Kindly is a vote for a plastic-free future. Why not get rewarded for it? Join our community to earn points on every shop:
+- **250 points** = **£5 OFF**
+- **500 points** = **£10 OFF**
+Sign up takes 30 seconds at the till, or [click here to join the revolution](https://link-to-be-confirmed.com).
 
 MULTI-SCENARIO RULES:
-1. REFILL BINS: If you see a 4-digit code (e.g., 1038), it is a refill. Prioritize ingredients and origin from the database.
-2. SHELF VIEW: If the photo shows many items, focus on the one in the center. If unsure, ask which one they mean.
-3. DELI POTS: For fresh items (curries/salads), read the label in the photo directly if the database doesn't have the specific batch info.
-4. ALLERGENS: Never say "it's safe." Always say: "Check the physical label and ask staff to be certain."
-
-LOYALTY: LoyalZoo, £1 = 1pt. Signup at till.
-OPENING HOURS: 
-York Place: M-F 8-8, Sat 9-7, Sun 10-5. 
-Dyke Road: M-Sat 9-6, Sun 10-4.`;
+1. REFILL BINS: If you see a 4-digit code (e.g., 1038), focus on that match.
+2. SHELF VIEW: Identify the specific product in the center.
+3. ALLERGENS: Never say "it's safe". Always say: "Check the physical label and ask staff to be certain."`;
 
 let imageBase64 = null;
 let imageType = null;
@@ -183,7 +197,7 @@ function addMessage(role, content, imgSrc) {
   }
   if (content) {
     const span = document.createElement('span');
-    span.textContent = content;
+    span.innerHTML = content.replace(/\n/g, '<br>');
     bubble.appendChild(span);
   }
   div.appendChild(avatar);
@@ -228,7 +242,7 @@ async function sendMessage() {
 
   const userContent = [];
   if (hasImage) userContent.push({ type:'image', source:{ type:'base64', media_type:storedType, data:storedImg } });
-  userContent.push({ type:'text', text: text || 'What product is this? Tell me the ingredients and if it is vegan.' });
+  userContent.push({ type:'text', text: text || 'Tell me about this product.' });
 
   messages.push({ role:'user', content:userContent });
   showTyping();
