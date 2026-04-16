@@ -155,13 +155,13 @@ function handleImage(input) {
   reader.onload = (e) => {
     const img = new Image();
     img.onload = () => {
-      // Create a canvas to resize the image
       const canvas = document.createElement('canvas');
       let width = img.width;
       let height = img.height;
 
-      // Max dimension of 1024px for AI analysis
-      const MAX_SIZE = 1024;
+      // 1. Lower the MAX_SIZE to 800px. 
+      // This is plenty for Claude to read labels but keeps the file tiny.
+      const MAX_SIZE = 800; 
       if (width > height) {
         if (width > MAX_SIZE) {
           height *= MAX_SIZE / width;
@@ -179,8 +179,9 @@ function handleImage(input) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Convert to a smaller, compressed JPEG
-      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7); // 70% quality is perfect
+      // 2. Reduce JPEG quality to 0.5 (50%). 
+      // This is the "Magic Number" to stay under Vercel's limit.
+      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5); 
       
       imageBase64 = compressedBase64.split(',')[1];
       document.getElementById('preview-img').src = compressedBase64;
