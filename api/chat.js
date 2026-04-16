@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
+  // 1. Handle CORS and Options
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -8,13 +9,15 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  // 2. Initialize Supabase
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
   try {
     const { messages, system, model, max_tokens } = req.body;
     const lastMessage = messages[messages.length - 1];
     
-    let customerQuestion = '';
+    // Extract text for database lookup
+    let customerQuestion = "";
     let hadImage = false;
 
     if (Array.isArray(lastMessage.content)) {
@@ -37,17 +40,18 @@ export default async function handler(req, res) {
 
     const dataSourceTag = foundInDb 
         ? "📋 *From Kindly's product database*" 
-        : "💡 *General knowledge — product details may vary*";
+        : "💡 *General knowledge*";
 
-    const enhancedSystem = `${system}
-    
-    ${foundInDb ? productContext : "No specific product match in database."}
-    
-    CRITICAL INSTRUCTIONS:
-        - If the user asks about Loyalty, use the EXACT Loyalty Rewards text provided in the system prompt. Do not summarize it.
-        - Keep the bullet points and bold text exactly as they appear.
-        - End with exactly: ${dataSourceTag}`;
+    // 3. COMBINE SYSTEM PROMPT
+    // We append the database data to the system prompt sent from index.html
+    const finalSystem = `${system}
 
+${foundInDb ? productContext : "Note: No specific database match found for this query."}
+
+CRITICAL: If the user asks about Loyalty or Hours, use the EXACT text provided in the instructions above. 
+ALWAYS end your response with: ${dataSourceTag}`;
+
+    // 4. CALL CLAUDE
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -58,15 +62,21 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: model || "claude-3-haiku-20240307",
         max_tokens: max_tokens || 400,
-        system: enhancedSystem,
+        system: finalSystem,
         messages: messages
       })
     });
 
     const data = await response.json();
-    const solAnswer = data.content?.[0]?.text || '';
 
-    // Log to Supabase
+    // Error handling for API response
+    if (data.error) {
+      console.error('Claude API Error:', data.error);
+      return res.status(500).json({ error: data.error.message });
+    }
+
+    // 5. LOG TO SUPABASE (Optional/Background)
+    const solAnswer = data.content?.[0]?.text || '';
     supabase.from('sol_question_log').insert([{
       question: customerQuestion,
       answer: solAnswer,
@@ -77,12 +87,16 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
 
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error('Vercel Handler Error:', err.message);
+    return res.status(500).json({ error: 'Server error: ' + err.message });
   }
 }
 
+// ── Search Strategy ──────────────────────────────────────────────────
 async function lookupProducts(text, supabase) {
-  // A. REFILL CODE (Regex for 4-digit code)
+  if (!text || text.length < 3) return { matches: [], method: 'none' };
+
+  // A. REFILL CODE (4-digit)
   const codeMatch = text.match(/\b(\d{4})\b/);
   if (codeMatch) {
     const code = codeMatch[1];
@@ -93,36 +107,25 @@ async function lookupProducts(text, supabase) {
     if (data?.length > 0) return { matches: data, method: 'code' };
   }
 
-  // B. EXACT PHRASE
-  if (text.length > 5) {
-    const { data } = await supabase.from('sol_products')
-      .select('*')
-      .ilike('product_name', `*${text.trim()}*`)
-      .eq('approved', true).limit(2);
-    if (data?.length > 0) return { matches: data, method: 'phrase' };
-  }
-
-  // C. FUZZY
-  const terms = text.split(/\s+/).filter(t => t.length > 3);
-  if (terms.length > 0) {
-    const pattern = `*${terms.slice(0, 2).join('*')}*`;
-    const { data } = await supabase.from('sol_products')
-      .select('*')
-      .ilike('product_name', pattern)
-      .eq('approved', true).limit(3);
-    return { matches: data || [], method: 'fuzzy' };
-  }
+  // B. PHRASE MATCH
+  const { data: phraseData } = await supabase.from('sol_products')
+    .select('*')
+    .ilike('product_name', `%${text.trim()}%`)
+    .eq('approved', true).limit(1);
+  if (phraseData?.length > 0) return { matches: phraseData, method: 'phrase' };
 
   return { matches: [], method: 'none' };
 }
 
+// ── Context Formatting ───────────────────────────────────────────────
 function formatProductContext(products) {
-  const lines = ['KINDLY DATABASE DATA:'];
-  for (const p of products) {
-    lines.push(`\n- Product: ${p.product_name}`);
-    if (p.ingredients) lines.push(`- Ingredients: ${p.ingredients}`);
-    if (p.allergens)   lines.push(`- Allergens: ${p.allergens}`);
-    if (p.impact_line) lines.push(`- Why it's kindly: ${p.impact_line}`);
-  }
-  return lines.join('\n');
+  let context = "\nVERIFIED DATABASE DATA:\n";
+  products.forEach(p => {
+    context += `- Product: ${p.product_name}\n`;
+    if (p.brand) context += `  Brand: ${p.brand}\n`;
+    if (p.ingredients) context += `  Ingredients: ${p.ingredients}\n`;
+    if (p.allergens) context += `  Allergens: ${p.allergens}\n`;
+    if (p.impact_line) context += `  Impact: ${p.impact_line}\n`;
+  });
+  return context;
 }
