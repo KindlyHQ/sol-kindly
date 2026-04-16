@@ -44,9 +44,9 @@ export default async function handler(req, res) {
     ${foundInDb ? productContext : "No specific product match in database."}
     
     CRITICAL INSTRUCTIONS:
-    - If Loyalty is asked, explain the 250pt (£5) and 500pt (£10) rewards.
-    - If you are describing a product found in the database, prioritize the ingredients and impact line.
-    - ALWAYS end with exactly: ${dataSourceTag}`;
+        - ALWAYS use bullet points (•) and clear new lines for lists (Hours or Rewards).
+        - If the user asks about loyalty, use the £5 and £10 reward tiers and sound enthusiastic.
+        - End with exactly: ${dataSourceTag}`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
