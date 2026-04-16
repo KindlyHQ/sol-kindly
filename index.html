@@ -67,7 +67,7 @@
 </div>
 
 <div class="impact-banner">
-  <div class="impact-stat"><div class="num">325K+</div><div class="lbl">plastics diverted</div></div>
+  <div class="impact-stat"><div class="num">370K+</div><div class="lbl">plastics diverted</div></div>
   <div class="impact-stat"><div class="num">66t</div><div class="lbl">CO₂ saved</div></div>
   <div class="impact-stat"><div class="num">66p</div><div class="lbl">stays in Brighton</div></div>
   <div class="impact-stat"><div class="num">75%</div><div class="lbl">return customers</div></div>
@@ -81,7 +81,7 @@
 </div>
 
 <div class="quick-actions">
-  <button class="quick-btn refill" onclick="triggerRefillScan()">🏺 Scan any product</button>
+  <button class="quick-btn refill" onclick="triggerRefillScan()">📸 Scan any Product</button>
   <button class="quick-btn" onclick="sendQuick('Is everything in the store vegan?')">Is everything vegan?</button>
   <button class="quick-btn" onclick="sendQuick('What are your opening hours?')">Opening hours</button>
   <button class="quick-btn" onclick="sendQuick('Tell me about your loyalty rewards')">Loyalty Rewards</button>
@@ -121,18 +121,13 @@ OPENING HOURS:
 • Fri–Sat: 9am – 7pm
 • Sunday: 10am – 7pm
 
-LOYALTY REWARDS (USE THIS EXACT TEXT):
+LOYALTY REWARDS:
 Every shop at Kindly is a vote for a plastic-free future—why not get rewarded for it? 🌍
-
 Join our community and turn your planet-positive choices into treats. **Every £1 you spend earns you 1 point.** Check out the rewards:
 • **250 points** = **£5 OFF** your shop
 • **500 points** = **£10 OFF** your shop
 
 Sign up takes just 30 seconds at the till, or you can **[click here to join the revolution and start earning now!](https://start.mylty.co/?id=21913)**. Ready to make your shop count?
-
-MULTI-SCENARIO RULES:
-1. REFILL BINS: If you see a 4-digit code (e.g., 1038), it is a refill. Prioritize database info.
-2. ALLERGENS: Never say "it's safe." Always say: "Check the physical label and ask staff to be certain."`;
 
 REFILL INSTRUCTIONS (Avery Berkel):
 If a user asks how to refill, use these 4 steps:
@@ -142,7 +137,11 @@ If a user asks how to refill, use these 4 steps:
 4. **TILL:** Take your labeled items to the counter and the staff will do the rest!
 
 *Friendly Tip: Forgot a jar? We have free donated ones and paper bags available!*
- 
+
+MULTI-SCENARIO RULES:
+1. REFILL BINS: If you see a 4-digit code (e.g., 1038), it is a refill. Prioritize database info.
+2. ALLERGENS: Never say "it's safe." Always say: "Check the physical label and ask staff to be certain."`;
+
 let imageBase64 = null;
 let messages = [];
 let isLoading = false;
@@ -153,6 +152,7 @@ function autoResize(el) {
 }
 
 function triggerRefillScan() {
+    addMessage('sol', 'Ready to refill? Snap a photo of the bin code, then follow the 4 steps: **Tare, Fill, Label, and Till!**');
     document.getElementById('file-input').click();
 }
 
@@ -167,10 +167,8 @@ function handleImage(input) {
       const canvas = document.createElement('canvas');
       let width = img.width;
       let height = img.height;
-
-      // 1. Lower the MAX_SIZE to 800px. 
-      // This is plenty for Claude to read labels but keeps the file tiny.
       const MAX_SIZE = 800; 
+
       if (width > height) {
         if (width > MAX_SIZE) {
           height *= MAX_SIZE / width;
@@ -188,10 +186,7 @@ function handleImage(input) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(img, 0, 0, width, height);
 
-      // 2. Reduce JPEG quality to 0.5 (50%). 
-      // This is the "Magic Number" to stay under Vercel's limit.
       const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5); 
-      
       imageBase64 = compressedBase64.split(',')[1];
       document.getElementById('preview-img').src = compressedBase64;
       document.getElementById('img-preview').style.display = 'block';
@@ -226,11 +221,8 @@ function addMessage(role, content, imgSrc) {
   }
   
   if (content) {
-    // 1. Convert Markdown links: [Text](URL) -> <a target="_blank">Text</a>
     let formatted = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-    // 2. Bold text
     formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    // 3. Line breaks
     formatted = formatted.replace(/\n/g, '<br>');
     bubble.innerHTML += formatted;
   }
@@ -269,8 +261,7 @@ async function sendMessage() {
   isLoading = true;
   document.getElementById('send-btn').disabled = true;
 
-  // 1. Get the actual media type from the preview image
-  let detectedMimeType = "image/jpeg"; // default
+  let detectedMimeType = "image/jpeg";
   if (hasImage) {
     const previewSrc = document.getElementById('preview-img').src;
     const match = previewSrc.match(/^data:(image\/[a-z]+);base64,/);
@@ -289,7 +280,7 @@ async function sendMessage() {
       type: 'image', 
       source: { 
         type: 'base64', 
-        media_type: detectedMimeType, // Use the detected type (png or jpeg)
+        media_type: detectedMimeType, 
         data: storedImg 
       } 
     });
@@ -329,7 +320,6 @@ async function sendMessage() {
   isLoading = false;
   document.getElementById('send-btn').disabled = false;
 }
- 
 </script>
 </body>
 </html>
