@@ -259,17 +259,34 @@ async function sendMessage() {
   isLoading = true;
   document.getElementById('send-btn').disabled = true;
 
-  addMessage('user', text || '(Photo upload)', hasImage ? `data:image/jpeg;base64,${imageBase64}` : null);
+  // 1. Get the actual media type from the preview image
+  let detectedMimeType = "image/jpeg"; // default
+  if (hasImage) {
+    const previewSrc = document.getElementById('preview-img').src;
+    const match = previewSrc.match(/^data:(image\/[a-z]+);base64,/);
+    if (match) detectedMimeType = match[1];
+  }
+
+  addMessage('user', text || '(Photo upload)', hasImage ? document.getElementById('preview-img').src : null);
   input.value = ''; input.style.height = 'auto';
 
   const storedImg = imageBase64;
   removeImage();
 
   const userContent = [];
-  if (hasImage) userContent.push({ type:'image', source:{ type:'base64', media_type:'image/jpeg', data:storedImg } });
-  userContent.push({ type:'text', text: text || 'Tell me about this.' });
+  if (hasImage) {
+    userContent.push({ 
+      type: 'image', 
+      source: { 
+        type: 'base64', 
+        media_type: detectedMimeType, // Use the detected type (png or jpeg)
+        data: storedImg 
+      } 
+    });
+  }
+  userContent.push({ type: 'text', text: text || 'Tell me about this product.' });
 
-  messages.push({ role:'user', content:userContent });
+  messages.push({ role: 'user', content: userContent });
   showTyping();
 
   try {
@@ -292,7 +309,7 @@ async function sendMessage() {
     } else {
       const reply = data.content[0].text;
       addMessage('sol', reply);
-      messages.push({ role:'assistant', content:reply });
+      messages.push({ role: 'assistant', content: reply });
     }
   } catch(e) {
     removeTyping();
@@ -302,6 +319,7 @@ async function sendMessage() {
   isLoading = false;
   document.getElementById('send-btn').disabled = false;
 }
+ 
 </script>
 </body>
 </html>
