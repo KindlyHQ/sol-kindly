@@ -150,11 +150,43 @@ function triggerRefillScan() {
 function handleImage(input) {
   const file = input.files[0];
   if (!file) return;
+
   const reader = new FileReader();
-  reader.onload = e => {
-    imageBase64 = e.target.result.split(',')[1];
-    document.getElementById('preview-img').src = e.target.result;
-    document.getElementById('img-preview').style.display = 'block';
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      // Create a canvas to resize the image
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      // Max dimension of 1024px for AI analysis
+      const MAX_SIZE = 1024;
+      if (width > height) {
+        if (width > MAX_SIZE) {
+          height *= MAX_SIZE / width;
+          width = MAX_SIZE;
+        }
+      } else {
+        if (height > MAX_SIZE) {
+          width *= MAX_SIZE / height;
+          height = MAX_SIZE;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Convert to a smaller, compressed JPEG
+      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7); // 70% quality is perfect
+      
+      imageBase64 = compressedBase64.split(',')[1];
+      document.getElementById('preview-img').src = compressedBase64;
+      document.getElementById('img-preview').style.display = 'block';
+    };
+    img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
