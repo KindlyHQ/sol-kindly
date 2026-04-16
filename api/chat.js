@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     }
 
     // --- SMART TIERED LOOKUP ---
-    const { matches, method } = await lookupProducts(customerQuestion, supabase);
+    const { matches } = await lookupProducts(customerQuestion, supabase);
 
     let productContext = '';
     let foundInDb = false;
@@ -42,16 +42,23 @@ export default async function handler(req, res) {
         ? "📋 *From Kindly's product database*" 
         : "💡 *General knowledge*";
 
-    // 3. COMBINE SYSTEM PROMPT
-    // We append the database data to the system prompt sent from index.html
+    // 3. COMBINE SYSTEM PROMPT (Hardcoded Loyalty Link)
     const finalSystem = `${system}
 
 ${foundInDb ? productContext : "Note: No specific database match found for this query."}
 
-CRITICAL: If the user asks about Loyalty or Hours, use the EXACT text provided in the instructions above. 
+CRITICAL: If the user asks about Loyalty, use this EXACT text:
+Every shop at Kindly is a vote for a plastic-free future—why not get rewarded for it? 🌍
+
+Join our community and turn your planet-positive choices into treats. **Every £1 you spend earns you 1 point.** Check out the rewards:
+• **250 points** = **£5 OFF** your shop
+• **500 points** = **£10 OFF** your shop
+
+Sign up takes just 30 seconds at the till, or you can **[click here to join the revolution and start earning now!](https://start.mylty.co/?id=21913)**. Ready to make your shop count?
+
 ALWAYS end your response with: ${dataSourceTag}`;
 
-    // 4. CALL CLAUDE
+    // 4. CALL CLAUDE (Using the 2026 Speed-Optimized Haiku)
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -69,13 +76,12 @@ ALWAYS end your response with: ${dataSourceTag}`;
 
     const data = await response.json();
 
-    // Error handling for API response
     if (data.error) {
       console.error('Claude API Error:', data.error);
       return res.status(500).json({ error: data.error.message });
     }
 
-    // 5. LOG TO SUPABASE (Optional/Background)
+    // 5. LOG TO SUPABASE
     const solAnswer = data.content?.[0]?.text || '';
     supabase.from('sol_question_log').insert([{
       question: customerQuestion,
@@ -96,20 +102,18 @@ ALWAYS end your response with: ${dataSourceTag}`;
 async function lookupProducts(text, supabase) {
   if (!text || text.length < 3) return { matches: [], method: 'none' };
 
-  // A. REFILL CODE (4-digit)
   const codeMatch = text.match(/\b(\d{4})\b/);
   if (codeMatch) {
     const code = codeMatch[1];
     const { data } = await supabase.from('sol_products')
-      .select('*')
+      .select('product_name, brand, ingredients, allergens, impact_line')
       .or(`epos_id.eq.${code},infinity_sku.eq.${code}`)
       .eq('approved', true).limit(1);
     if (data?.length > 0) return { matches: data, method: 'code' };
   }
 
-  // B. PHRASE MATCH
   const { data: phraseData } = await supabase.from('sol_products')
-    .select('*')
+    .select('product_name, brand, ingredients, allergens, impact_line')
     .ilike('product_name', `%${text.trim()}%`)
     .eq('approved', true).limit(1);
   if (phraseData?.length > 0) return { matches: phraseData, method: 'phrase' };
