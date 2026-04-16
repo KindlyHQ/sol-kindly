@@ -60,7 +60,7 @@ ALWAYS end your response with: ${dataSourceTag}`;
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: "claude-3-haiku-20240307",
+        model: "claude-3-5-haiku-latest",
         max_tokens: max_tokens || 400,
         system: finalSystem,
         messages: messages
