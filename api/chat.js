@@ -1,7 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-  // 1. CORS and Method Handling
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -9,16 +8,12 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const apiKey = process.env.CLAUDE_API_KEY;
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseKey = process.env.SUPABASE_KEY;
-  const supabase = createClient(supabaseUrl, supabaseKey);
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
   try {
     const { messages, system, model, max_tokens } = req.body;
     const lastMessage = messages[messages.length - 1];
     
-    // Extract text from the last message (could be a string or array)
     let customerQuestion = '';
     let hadImage = false;
 
@@ -29,7 +24,7 @@ export default async function handler(req, res) {
       customerQuestion = lastMessage.content || "";
     }
 
-    // 2. TIERED LOOKUP LOGIC (Now works with images!)
+    // --- SMART TIERED LOOKUP ---
     const { matches, method } = await lookupProducts(customerQuestion, supabase);
 
     let productContext = '';
@@ -38,29 +33,26 @@ export default async function handler(req, res) {
     if (matches && matches.length > 0) {
       productContext = formatProductContext(matches);
       foundInDb = true;
-      console.log(`DB hit using ${method}:`, matches[0].product_name);
     }
 
-    // 3. BUILD ENHANCED SYSTEM PROMPT
-    let dataSourceTag = foundInDb 
+    const dataSourceTag = foundInDb 
         ? "📋 *From Kindly's product database*" 
         : "💡 *General knowledge — product details may vary*";
 
     const enhancedSystem = `${system}
     
-    ${foundInDb ? productContext : "No specific product data found in database."}
+    ${foundInDb ? productContext : "No specific product match in database."}
     
     CRITICAL INSTRUCTIONS:
-    - If there is a 4-digit code in the photo (like 1038), it is a REFILL. Focus on that match.
-    - If looking at a shelf/deli pot and the database is missing, read labels from the photo.
-    - ALWAYS end your response with exactly: ${dataSourceTag}`;
+    - If Loyalty is asked, explain the 250pt (£5) and 500pt (£10) rewards.
+    - If you are describing a product found in the database, prioritize the ingredients and impact line.
+    - ALWAYS end with exactly: ${dataSourceTag}`;
 
-    // 4. CALL CLAUDE
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'x-api-key': process.env.CLAUDE_API_KEY,
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
@@ -74,7 +66,7 @@ export default async function handler(req, res) {
     const data = await response.json();
     const solAnswer = data.content?.[0]?.text || '';
 
-    // 5. LOG QUESTION (Fire and forget)
+    // Log to Supabase
     supabase.from('sol_question_log').insert([{
       question: customerQuestion,
       answer: solAnswer,
@@ -85,26 +77,24 @@ export default async function handler(req, res) {
     return res.status(200).json(data);
 
   } catch (err) {
-    console.error('Handler error:', err.message);
-    return res.status(500).json({ error: 'Proxy error: ' + err.message });
+    return res.status(500).json({ error: err.message });
   }
 }
 
-// ── Search Strategy: Code -> Phrase -> Fuzzy ──────────────────────────
 async function lookupProducts(text, supabase) {
-  // A. REFILL CODE MATCH (e.g. 1038)
-  const codeMatch = text.match(/(?<![.\d])\b(\d{3,5})\b(?![.\d])/);
+  // A. REFILL CODE (Regex for 4-digit code)
+  const codeMatch = text.match(/\b(\d{4})\b/);
   if (codeMatch) {
     const code = codeMatch[1];
     const { data } = await supabase.from('sol_products')
       .select('*')
-      .or(`infinity_sku.eq.${code},suma_code.eq.${code},epos_id.eq.${code}`)
+      .or(`epos_id.eq.${code},infinity_sku.eq.${code}`)
       .eq('approved', true).limit(1);
     if (data?.length > 0) return { matches: data, method: 'code' };
   }
 
-  // B. EXACT PHRASE MATCH (For "Vegetable & Chickpea Curry")
-  if (text.length > 4) {
+  // B. EXACT PHRASE
+  if (text.length > 5) {
     const { data } = await supabase.from('sol_products')
       .select('*')
       .ilike('product_name', `*${text.trim()}*`)
@@ -112,7 +102,7 @@ async function lookupProducts(text, supabase) {
     if (data?.length > 0) return { matches: data, method: 'phrase' };
   }
 
-  // C. KEYWORD FUZZY MATCH (For Shelves)
+  // C. FUZZY
   const terms = text.split(/\s+/).filter(t => t.length > 3);
   if (terms.length > 0) {
     const pattern = `*${terms.slice(0, 2).join('*')}*`;
@@ -120,22 +110,19 @@ async function lookupProducts(text, supabase) {
       .select('*')
       .ilike('product_name', pattern)
       .eq('approved', true).limit(3);
-    if (data?.length > 0) return { matches: data, method: 'fuzzy' };
+    return { matches: data || [], method: 'fuzzy' };
   }
 
   return { matches: [], method: 'none' };
 }
 
-// ── Formatting Logic (Keep your existing format) ──────────────────────
 function formatProductContext(products) {
-  const lines = ['VERIFIED KINDLY PRODUCT DATA:'];
+  const lines = ['KINDLY DATABASE DATA:'];
   for (const p of products) {
-    lines.push(`\nProduct: ${p.product_name}${p.brand ? ' by ' + p.brand : ''}`);
-    if (p.ingredients) lines.push(`Ingredients: ${p.ingredients}`);
-    if (p.allergens)   lines.push(`Allergens: ${p.allergens}`);
-    if (p.vegan)       lines.push(`Vegan: ${p.vegan}`);
-    if (p.organic)     lines.push(`Organic: ${p.organic}`);
-    if (p.description) lines.push(`Description: ${p.description}`);
+    lines.push(`\n- Product: ${p.product_name}`);
+    if (p.ingredients) lines.push(`- Ingredients: ${p.ingredients}`);
+    if (p.allergens)   lines.push(`- Allergens: ${p.allergens}`);
+    if (p.impact_line) lines.push(`- Why it's kindly: ${p.impact_line}`);
   }
   return lines.join('\n');
 }
