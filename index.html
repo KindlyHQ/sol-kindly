@@ -60,7 +60,7 @@
   <div class="header-icon">☀️</div>
   <div class="header-text">
     <h1>Sol</h1>
-    <p>Kindly Brighton · AI Guide</p>
+    <p>Kindly Brighton · Help Guide</p>
   </div>
   <div class="status-dot"></div>
 </div>
@@ -103,7 +103,7 @@
 </div>
 
 <script>
-const SYSTEM_PROMPT = `You are Sol — the friendly, planet-passionate AI guide for Kindly Brighton.
+const SYSTEM_PROMPT = `You are Sol — the friendly, planet-passionate helping guide for Kindly Brighton.
 
 FORMATTING RULES:
 - Use bullet points (•) for all lists.
@@ -249,7 +249,7 @@ async function sendMessage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        model: 'claude-sonnet-4-6', 
+        model: 'claude-haiku-4-5-20251001', 
         max_tokens: 400, 
         system: SYSTEM_PROMPT, 
         messages: messages 
