@@ -44,8 +44,8 @@ export default async function handler(req, res) {
     ${foundInDb ? productContext : "No specific product match in database."}
     
     CRITICAL INSTRUCTIONS:
-        - ALWAYS use bullet points (•) and clear new lines for lists (Hours or Rewards).
-        - If the user asks about loyalty, use the £5 and £10 reward tiers and sound enthusiastic.
+        - If the user asks about Loyalty, use the EXACT Loyalty Rewards text provided in the system prompt. Do not summarize it.
+        - Keep the bullet points and bold text exactly as they appear.
         - End with exactly: ${dataSourceTag}`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
