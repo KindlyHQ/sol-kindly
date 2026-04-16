@@ -30,6 +30,7 @@
   .bubble { max-width:82%;padding:10px 14px;border-radius:18px;font-size:14px;line-height:1.6; }
   .bubble.sol { background:white;border:0.5px solid #ffe0e8;border-bottom-left-radius:4px;color:#1a0a0f; }
   .bubble.user { background:#ff0054;color:white;border-bottom-right-radius:4px; }
+  .bubble a { color: #ff0054; text-decoration: underline; font-weight: bold; }
   .typing-indicator { display:flex;gap:4px;padding:14px;background:white;border:0.5px solid #ffe0e8;border-radius:18px;border-bottom-left-radius:4px;width:fit-content; }
   .typing-dot { width:6px;height:6px;background:#ff0054;border-radius:50%;animation:bounce 1.2s infinite;opacity:0.4; }
   .typing-dot:nth-child(2){animation-delay:0.2s}
@@ -60,7 +61,7 @@
   <div class="header-icon">☀️</div>
   <div class="header-text">
     <h1>Sol</h1>
-    <p>Kindly Brighton · Help Guide</p>
+    <p>Kindly Brighton · AI Guide</p>
   </div>
   <div class="status-dot"></div>
 </div>
@@ -103,7 +104,7 @@
 </div>
 
 <script>
-const SYSTEM_PROMPT = `You are Sol — the friendly, planet-passionate helping guide for Kindly Brighton.
+const SYSTEM_PROMPT = `You are Sol — the friendly, planet-passionate AI guide for Kindly Brighton.
 
 FORMATTING RULES:
 - Use bullet points (•) for all lists.
@@ -134,10 +135,8 @@ MULTI-SCENARIO RULES:
 2. ALLERGENS: Never say "it's safe." Always say: "Check the physical label and ask staff to be certain."`;
 
 let imageBase64 = null;
-let imageType = null;
 let messages = [];
 let isLoading = false;
-let isRefillIntent = false;
 
 function autoResize(el) {
   el.style.height = 'auto';
@@ -145,7 +144,6 @@ function autoResize(el) {
 }
 
 function triggerRefillScan() {
-    isRefillIntent = true;
     document.getElementById('file-input').click();
 }
 
@@ -157,10 +155,6 @@ function handleImage(input) {
     imageBase64 = e.target.result.split(',')[1];
     document.getElementById('preview-img').src = e.target.result;
     document.getElementById('img-preview').style.display = 'block';
-    if (isRefillIntent) {
-        document.getElementById('msg-input').value = "Tell me about this refill bin.";
-        isRefillIntent = false;
-    }
   };
   reader.readAsDataURL(file);
 }
@@ -190,10 +184,12 @@ function addMessage(role, content, imgSrc) {
   }
   
   if (content) {
-    // Formatting: Bold text and Line breaks
-    let formatted = content
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n/g, '<br>');
+    // 1. Convert Markdown links: [Text](URL) -> <a target="_blank">Text</a>
+    let formatted = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    // 2. Bold text
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // 3. Line breaks
+    formatted = formatted.replace(/\n/g, '<br>');
     bubble.innerHTML += formatted;
   }
   
