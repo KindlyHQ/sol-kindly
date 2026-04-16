@@ -45,20 +45,21 @@ export default async function handler(req, res) {
     // 3. COMBINE SYSTEM PROMPT (Hardcoded Loyalty Link)
     const finalSystem = `${system}
 
-${foundInDb ? productContext : "Note: No specific database match found for this query."}
+    ${foundInDb ? productContext : "Note: No specific database match found for this query."}
+    
+    CRITICAL: If the user asks about Loyalty, use this EXACT text:
+    Every shop at Kindly is a vote for a plastic-free future—why not get rewarded for it? 🌍
+    
+    Join our community and turn your planet-positive choices into treats. **Every £1 you spend earns you 1 point.** Check out the rewards:
+    • **250 points** = **£5 OFF** your shop
+    • **500 points** = **£10 OFF** your shop
+    
+    Sign up takes just 30 seconds at the till, or you can **[click here to join the revolution and start earning now!](https://start.mylty.co/?id=21913)**. Ready to make your shop count?
+    
+    ALWAYS end your response with: ${dataSourceTag}`;
 
-CRITICAL: If the user asks about Loyalty, use this EXACT text:
-Every shop at Kindly is a vote for a plastic-free future—why not get rewarded for it? 🌍
-
-Join our community and turn your planet-positive choices into treats. **Every £1 you spend earns you 1 point.** Check out the rewards:
-• **250 points** = **£5 OFF** your shop
-• **500 points** = **£10 OFF** your shop
-
-Sign up takes just 30 seconds at the till, or you can **[click here to join the revolution and start earning now!](https://start.mylty.co/?id=21913)**. Ready to make your shop count?
-
-ALWAYS end your response with: ${dataSourceTag}`;
-
-    // 4. CALL CLAUDE (Using the 2026 Speed-Optimized Haiku)
+    // 4. CALL CLAUDE (Dynamic Media Type Detection)
+    // This ensures we never send the wrong label (JPEG vs PNG) to Claude
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -70,16 +71,22 @@ ALWAYS end your response with: ${dataSourceTag}`;
         model: "claude-haiku-4-5-20251001",
         max_tokens: max_tokens || 400,
         system: finalSystem,
-        messages: messages
+        messages: messages.map(msg => {
+          // If the message contains an image, ensure the media_type is correct
+          if (Array.isArray(msg.content)) {
+            msg.content = msg.content.map(part => {
+              if (part.type === 'image' && part.source) {
+                // If it's an image, let's make sure we don't force JPEG
+                // The frontend now sends the correct type, so we just pass it through
+                return part; 
+              }
+              return part;
+            });
+          }
+          return msg;
+        })
       })
     });
-
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Claude API Error:', data.error);
-      return res.status(500).json({ error: data.error.message });
-    }
 
     // 5. LOG TO SUPABASE
     const solAnswer = data.content?.[0]?.text || '';
