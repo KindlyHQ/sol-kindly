@@ -308,7 +308,7 @@ async function sendMessage() {
     if (data.error) {
       addMessage('sol', 'I hit a snag. One more try?');
     } else {
-      const reply = data.content[0].text;
+      const reply = data.content?.[0]?.text || '';
       addMessage('sol', reply);
       messages.push({ role: 'assistant', content: reply });
     }
