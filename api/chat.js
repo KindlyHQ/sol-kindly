@@ -194,7 +194,8 @@ function formatProductContext(products) {
   if (!products || products.length === 0) return '';
 
   const lines = [
-    'VERIFIED KINDLY PRODUCT DATA — answer from this data, not general knowledge:',
+    // 'VERIFIED KINDLY PRODUCT DATA — answer from this data, not general knowledge:',
+    'VERIFIED KINDLY PRODUCT DATA — use this to answer naturally in 2-4 sentences. DO NOT list all fields. Pick the most relevant facts for the question asked. Never format as a product card or use bullet points.',
   ];
 
   for (const p of products) {
