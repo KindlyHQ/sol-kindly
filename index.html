@@ -27,19 +27,49 @@
   .avatar { width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600; }
   .avatar.sol { background:#ff0054;color:white; }
   .avatar.user { background:#e8f0eb;color:#4A7C59; }
-  .bubble { max-width:82%;padding:10px 14px;border-radius:18px;font-size:14px;line-height:1.6; }
+  .bubble { max-width:82%;padding:10px 14px;border-radius:18px;font-size:14px;line-height:1.55; }
   .bubble.sol { background:white;border:0.5px solid #ffe0e8;border-bottom-left-radius:4px;color:#1a0a0f; }
   .bubble.user { background:#ff0054;color:white;border-bottom-right-radius:4px; }
-  .bubble a { color: #ff0054; text-decoration: underline; font-weight: bold; }
   .typing-indicator { display:flex;gap:4px;padding:14px;background:white;border:0.5px solid #ffe0e8;border-radius:18px;border-bottom-left-radius:4px;width:fit-content; }
   .typing-dot { width:6px;height:6px;background:#ff0054;border-radius:50%;animation:bounce 1.2s infinite;opacity:0.4; }
   .typing-dot:nth-child(2){animation-delay:0.2s}
   .typing-dot:nth-child(3){animation-delay:0.4s}
   @keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:0.4}30%{transform:translateY(-6px);opacity:1}}
-  .quick-actions { padding:0 16px 8px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none; }
+
+  /* ── Action buttons (Scan / Loyalty / Opening Hours) ── */
+  .action-btns {
+    padding: 10px 16px 4px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+  }
+  .action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    padding: 10px 6px;
+    border-radius: 14px;
+    border: 1.5px solid #ffb3c8;
+    background: white;
+    color: #ff0054;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .action-btn:active { transform: scale(0.96); background: #fff0f5; }
+  .action-btn .btn-icon { font-size: 20px; }
+
+  /* ── Quick chips (scrollable secondary row) ── */
+  .quick-actions { padding:6px 16px 8px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none; }
   .quick-actions::-webkit-scrollbar{display:none}
   .quick-btn { white-space:nowrap;padding:6px 12px;border-radius:16px;border:1px solid #ffb3c8;background:white;color:#ff0054;font-size:12px;cursor:pointer;flex-shrink:0; }
-  .quick-btn.refill { border: 2px solid #ff0054; font-weight: 600; }
+  .quick-btn:hover{background:#fff0f5}
+
   .input-area { padding:12px 16px 20px;background:white;border-top:0.5px solid #ffe0e8;display:flex;flex-direction:column;gap:8px; }
   .image-preview { display:none;position:relative;width:fit-content; }
   .image-preview img { max-height:80px;border-radius:8px;border:1px solid #ffe0e8; }
@@ -47,7 +77,9 @@
   .input-row { display:flex;gap:8px;align-items:flex-end; }
   .attach-btn { width:40px;height:40px;border-radius:50%;border:1px solid #ffb3c8;background:white;color:#ff0054;font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0; }
   .text-input { flex:1;padding:10px 14px;border-radius:20px;border:1px solid #ffb3c8;font-size:14px;outline:none;resize:none;max-height:100px;line-height:1.4;font-family:inherit;background:#fff8f5; }
+  .text-input:focus{border-color:#ff0054;background:white}
   .send-btn { width:40px;height:40px;border-radius:50%;border:none;background:#ff0054;color:white;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0; }
+  .send-btn:disabled{opacity:0.4;cursor:not-allowed}
   #file-input{display:none}
   .impact-banner { margin:0 16px 4px;background:#fff0f5;border:0.5px solid #ffb3c8;border-radius:12px;padding:10px 14px;display:flex;gap:12px;overflow-x:auto;scrollbar-width:none; }
   .impact-stat{text-align:center;flex-shrink:0}
@@ -61,7 +93,7 @@
   <div class="header-icon">☀️</div>
   <div class="header-text">
     <h1>Sol</h1>
-    <p>Kindly Brighton · AI Guide</p>
+    <p>Kindly Brighton · Product Guide</p>
   </div>
   <div class="status-dot"></div>
 </div>
@@ -76,15 +108,31 @@
 <div class="chat-area" id="chat">
   <div class="message">
     <div class="avatar sol">S</div>
-    <div class="bubble sol">Hi! I'm Sol. Photograph a product, scan a refill code, or ask me anything. What's on your list today? 🌱</div>
+    <div class="bubble sol">Hi! I'm Sol — Kindly's product guide. Photograph any product or ask me anything about what's in the shop. What can I help you with? 🌱</div>
   </div>
 </div>
 
+<!-- ── Primary action buttons ── -->
+<div class="action-btns">
+  <button class="action-btn" onclick="triggerScan()">
+    <span class="btn-icon">📷</span>
+    Scan
+  </button>
+  <button class="action-btn" onclick="sendQuick('Tell me about the Kindly loyalty scheme and how to sign up')">
+    <span class="btn-icon">⭐</span>
+    Loyalty
+  </button>
+  <button class="action-btn" onclick="sendQuick('What are the opening hours for both Kindly stores?')">
+    <span class="btn-icon">🕐</span>
+    Hours
+  </button>
+</div>
+
+<!-- ── Secondary quick chips ── -->
 <div class="quick-actions">
-  <button class="quick-btn refill" onclick="triggerRefillScan()">📸 Scan any Product</button>
   <button class="quick-btn" onclick="sendQuick('Is everything in the store vegan?')">Is everything vegan?</button>
-  <button class="quick-btn" onclick="sendQuick('What are your opening hours?')">Opening hours</button>
-  <button class="quick-btn" onclick="sendQuick('Tell me about your loyalty rewards')">Loyalty Rewards</button>
+  <button class="quick-btn" onclick="sendQuick('Tell me about Kindly\'s environmental impact')">Our impact</button>
+  <button class="quick-btn" onclick="sendQuick('Surprise me with a product story!')">Surprise me!</button>
 </div>
 
 <div class="input-area">
@@ -93,7 +141,7 @@
     <button class="remove-img" onclick="removeImage()">×</button>
   </div>
   <div class="input-row">
-    <button class="attach-btn" onclick="document.getElementById('file-input').click()">📷</button>
+    <button class="attach-btn" id="camera-btn" onclick="document.getElementById('file-input').click()">📷</button>
     <input type="file" id="file-input" accept="image/*" onchange="handleImage(this)" />
     <textarea class="text-input" id="msg-input" placeholder="Ask about any product..."
       rows="1"
@@ -104,45 +152,39 @@
 </div>
 
 <script>
-const SYSTEM_PROMPT = `You are Sol — the friendly, planet-passionate AI guide for Kindly Brighton.
+const SYSTEM_PROMPT = `You are Sol — the in-store AI guide for Kindly, Brighton's sustainable supermarket.
 
-FORMATTING RULES:
-- Use bullet points (•) for all lists.
-- ALWAYS use new lines for each store and each day's hours.
-- Use bold text for emphasis.
+RESPONSE LENGTH — CRITICAL RULE:
+Keep answers SHORT. 2-4 sentences maximum. Customers are standing in a shop. No bullet-point lists unless specifically asked. Lead with the most useful fact, then stop.
 
-OPENING HOURS:
-**York Place**
-• Mon–Sat: 8am – 8pm
-• Sunday: 10am – 7pm
+Personality: warm, Brighton, genuinely knowledgeable, zero pretension. Never preachy. Never start with "Great question!" or "Absolutely!".
 
-**Dyke Road**
-• Mon–Thu: 9am – 8pm
-• Fri–Sat: 9am – 7pm
-• Sunday: 10am – 7pm
+About Kindly:
+- UK's first hybrid sustainable supermarket, Brighton 2019, founded by Shiv Misra
+- 100% plant-based, 100% single-use plastic-free, organic loose produce
+- 370,000+ plastics diverted, 66t CO₂ saved, 5.8M litres water saved
+- 66p of every £1 stays in the Brighton economy, 75% repeat customers
 
-LOYALTY REWARDS:
-Every shop at Kindly is a vote for a plastic-free future—why not get rewarded for it? 🌍
-Join our community and turn your planet-positive choices into treats. **Every £1 you spend earns you 1 point.** Check out the rewards:
-• **250 points** = **£5 OFF** your shop
-• **500 points** = **£10 OFF** your shop
+OPENING HOURS — answer exactly like this when asked:
+York Place
+Mon–Fri  8:00am – 7:00pm
+Saturday  9:00am – 7:00pm
+Sunday  10:00am – 5:00pm
 
-Sign up takes just 30 seconds at the till, or you can **[click here to join the revolution and start earning now!](https://start.mylty.co/?id=21913)**. Ready to make your shop count?
+Dyke Road
+Mon–Sat  9:00am – 6:00pm
+Sunday  10:00am – 4:00pm
 
-REFILL INSTRUCTIONS (Avery Berkel):
-If a user asks how to refill, use these 4 steps:
-1. **TARE:** Place your empty container on the Avery Berkel scale to print your 'Tare' label.
-2. **FILL:** Take as much or as little as you need from the bins or pumps.
-3. **LABEL:** Scan your Tare label at the scale, enter the 4-digit code (I can give you this!), and print your final product label.
-4. **TILL:** Take your labeled items to the counter and the staff will do the rest!
+LOYALTY SCHEME:
+Kindly uses LoyalZoo. Every £1 spent earns points redeemable for discounts. Sign up at the till — takes 30 seconds. When relevant, mention it warmly as a genuine tip: "By the way, the Kindly loyalty scheme is worth signing up for — every £1 adds up and the team can sort it at the till in 30 seconds."
 
-*Friendly Tip: Forgot a jar? We have free donated ones and paper bags available!*
+ALLERGEN RULES — NON-NEGOTIABLE:
+Never say "yes it's safe" outright. Always add: "For severe allergies, check the physical label and speak to staff — they'll know."
 
-MULTI-SCENARIO RULES:
-1. REFILL BINS: If you see a 4-digit code (e.g., 1038), it is a refill. Prioritize database info.
-2. ALLERGENS: Never say "it's safe." Always say: "Check the physical label and ask staff to be certain."`;
+When you don't know: "I don't have that detail yet — worth asking at the till."`;
 
 let imageBase64 = null;
+let imageType = null;
 let messages = [];
 let isLoading = false;
 
@@ -151,82 +193,59 @@ function autoResize(el) {
   el.style.height = Math.min(el.scrollHeight, 100) + 'px';
 }
 
-function triggerRefillScan() {
-    addMessage('sol', 'Ready to refill? Snap a photo of the bin code, then follow the 4 steps: **Tare, Fill, Label, and Till!**');
-    document.getElementById('file-input').click();
+function normaliseMimeType(type) {
+  if (!type) return 'image/jpeg';
+  const map = { 'image/jpg':'image/jpeg','image/JPG':'image/jpeg','image/JPEG':'image/jpeg','image/PNG':'image/png','image/GIF':'image/gif','image/WEBP':'image/webp' };
+  return map[type] || type;
+}
+
+// Scan button — triggers the file input (camera on mobile)
+function triggerScan() {
+  document.getElementById('file-input').click();
 }
 
 function handleImage(input) {
   const file = input.files[0];
   if (!file) return;
-
+  imageType = normaliseMimeType(file.type || 'image/jpeg');
   const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
-      const MAX_SIZE = 800; 
-
-      if (width > height) {
-        if (width > MAX_SIZE) {
-          height *= MAX_SIZE / width;
-          width = MAX_SIZE;
-        }
-      } else {
-        if (height > MAX_SIZE) {
-          width *= MAX_SIZE / height;
-          height = MAX_SIZE;
-        }
-      }
-
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, width, height);
-
-      const compressedBase64 = canvas.toDataURL('image/jpeg', 0.5); 
-      imageBase64 = compressedBase64.split(',')[1];
-      document.getElementById('preview-img').src = compressedBase64;
-      document.getElementById('img-preview').style.display = 'block';
-    };
-    img.src = e.target.result;
+  reader.onload = e => {
+    imageBase64 = e.target.result.split(',')[1];
+    document.getElementById('preview-img').src = e.target.result;
+    document.getElementById('img-preview').style.display = 'block';
+    // Auto-focus the text input so user can add a question if they want
+    document.getElementById('msg-input').focus();
   };
   reader.readAsDataURL(file);
+  input.value = '';
 }
 
 function removeImage() {
-  imageBase64 = null;
+  imageBase64 = null; imageType = null;
   document.getElementById('img-preview').style.display = 'none';
+  document.getElementById('preview-img').src = '';
 }
 
 function addMessage(role, content, imgSrc) {
   const chat = document.getElementById('chat');
   const div = document.createElement('div');
   div.className = 'message ' + role;
-  
   const avatar = document.createElement('div');
   avatar.className = 'avatar ' + role;
   avatar.textContent = role === 'sol' ? 'S' : 'Y';
-  
   const bubble = document.createElement('div');
   bubble.className = 'bubble ' + role;
-  
   if (imgSrc) {
     const img = document.createElement('img');
     img.src = imgSrc;
     img.style.cssText = 'max-width:100%;border-radius:8px;margin-bottom:6px;display:block;';
     bubble.appendChild(img);
   }
-  
   if (content) {
-    let formatted = content.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
-    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    formatted = formatted.replace(/\n/g, '<br>');
-    bubble.innerHTML += formatted;
+    const span = document.createElement('span');
+    span.textContent = content;
+    bubble.appendChild(span);
   }
-  
   div.appendChild(avatar);
   div.appendChild(bubble);
   chat.appendChild(div);
@@ -261,44 +280,28 @@ async function sendMessage() {
   isLoading = true;
   document.getElementById('send-btn').disabled = true;
 
-  let detectedMimeType = "image/jpeg";
-  if (hasImage) {
-    const previewSrc = document.getElementById('preview-img').src;
-    const match = previewSrc.match(/^data:(image\/[a-z]+);base64,/);
-    if (match) detectedMimeType = match[1];
-  }
-
-  addMessage('user', text || '(Photo upload)', hasImage ? document.getElementById('preview-img').src : null);
+  addMessage('user', text || '(photographed a product)', hasImage ? `data:${imageType};base64,${imageBase64}` : null);
   input.value = ''; input.style.height = 'auto';
 
-  const storedImg = imageBase64;
+  const storedImg = imageBase64, storedType = imageType;
   removeImage();
 
   const userContent = [];
-  if (hasImage) {
-    userContent.push({ 
-      type: 'image', 
-      source: { 
-        type: 'base64', 
-        media_type: detectedMimeType, 
-        data: storedImg 
-      } 
-    });
-  }
-  userContent.push({ type: 'text', text: text || 'Tell me about this product.' });
+  if (hasImage) userContent.push({ type:'image', source:{ type:'base64', media_type:storedType, data:storedImg } });
+  userContent.push({ type:'text', text: text || 'What can you tell me about this product? Is it vegan? Any allergens?' });
 
-  messages.push({ role: 'user', content: userContent });
+  messages.push({ role:'user', content:userContent });
   showTyping();
 
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        model: 'claude-haiku-4-5-20251001', 
-        max_tokens: 400, 
-        system: SYSTEM_PROMPT, 
-        messages: messages 
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 400,
+        system: SYSTEM_PROMPT,
+        messages: messages
       })
     });
 
@@ -306,15 +309,17 @@ async function sendMessage() {
     removeTyping();
 
     if (data.error) {
-      addMessage('sol', 'I hit a snag. One more try?');
+      addMessage('sol', 'Something went wrong — please try again.');
+      console.error('API error:', data.error);
     } else {
-      const reply = data.content?.[0]?.text || '';
+      const reply = data.content[0].text;
       addMessage('sol', reply);
-      messages.push({ role: 'assistant', content: reply });
+      messages.push({ role:'assistant', content:reply });
+      if (messages.length > 20) messages = messages.slice(-20);
     }
   } catch(e) {
     removeTyping();
-    addMessage('sol', 'Connection issue. One more try?');
+    addMessage('sol', 'Connection error — please try again in a moment.');
   }
 
   isLoading = false;
