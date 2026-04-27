@@ -114,11 +114,19 @@ export default async function handler(req, res) {
         'End your response with a new line containing exactly: ' +
         '"📋 *From Kindly\'s product database*"';
     } else {
-      contextBlock = '\n\nIMPORTANT: No specific data was found in the Kindly database for this question. ' +
-        'Answer only if this relates to Kindly, our products, sustainable shopping, or the Brighton community. ' +
-        'Answer from your general knowledge but be appropriately cautious about specifics. ' +
-        'End your response with a new line containing exactly: ' +
-        '"💡 *General knowledge — product details may vary*"';
+      // Check if this is a vague follow-up with no context
+      const isVagueFollowUp = /^(tell me more|more please|more pls|tell me more pls|can you tell me more|go on|more\??)$/i.test(customerQuestion.trim());
+      if (isVagueFollowUp) {
+        contextBlock = '\n\nIMPORTANT: The customer has said "tell me more" or similar but there is no previous product context. ' +
+          'Respond warmly asking what they would like to know more about — e.g. a specific product, opening hours, our story, or our environmental impact. ' +
+          'Keep it brief and friendly. Do NOT append any database indicator emoji.';
+      } else {
+        contextBlock = '\n\nIMPORTANT: No specific data was found in the Kindly database for this question. ' +
+          'Answer only if this relates to Kindly, our products, sustainable shopping, or the Brighton community. ' +
+          'Answer from your general knowledge but be appropriately cautious about specifics. ' +
+          'End your response with a new line containing exactly: ' +
+          '"💡 *General knowledge — product details may vary*"';
+      }
     }
 
     requestBody.system = existingSystem + contextBlock;
@@ -182,6 +190,9 @@ function isOffTopic(question) {
   ];
   if (alwaysAllow.some(term => q.includes(term))) return false;
 
+  // "tell me more" / "more please" — always allow, Sol will ask for clarification
+  if (/^(tell me more|more please|more pls|tell me more pls|can you tell me more|go on|and|more\??)$/i.test(q.trim())) return false;
+
   // Block clearly off-topic subjects
   const offTopicPatterns = [
     /\b(weather|forecast|temperature|rain|sun|wind|snow)\b/,
@@ -218,7 +229,7 @@ function detectHiringQuestion(q) {
 }
 
 function detectAboutKindlyQuestion(q) {
-  return /\b(about kindly|what is kindly|who are kindly|kindly story|started|founded|founder|mission|values|impact|plastic diverted|saved|co2|carbon|water|community|fareshare|team domenica|award|how many (people|staff|employees)|next for kindly|future|expand|loyalty|loyalzoo)\b/.test(q);
+  return /\b(about kindly|what is kindly|who are kindly|kindly story|started|founded|founder|mission|values|impact|environmental|sustainability|plastic diverted|plastic saved|units saved|units diverted|co2|carbon|water|community|fareshare|team domenica|award|accolade|how many (people|staff|employees)|next for kindly|future|expand|loyalty|loyalzoo|local economy|reinvest|brighton economy)\b/.test(q);
 }
 
 
