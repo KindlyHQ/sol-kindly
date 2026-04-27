@@ -35,46 +35,100 @@ export default async function handler(req, res) {
       }
     }
 
-    // ── Supabase product lookup ─────────────────────────────────────────
-    let productContext = '';
-    let foundInDb = false;
+    // ── Off-topic guard ────────────────────────────────────────────────────
+    // If the question is clearly unrelated to Kindly, return a friendly
+    // redirect without calling Claude at all — saves cost and keeps Sol focused
+    if (isOffTopic(customerQuestion)) {
+      const offTopicReply = offTopicResponse();
+      if (supabaseUrl && supabaseKey && customerQuestion) {
+        logQuestion({
+          supabaseUrl, supabaseKey,
+          question:  customerQuestion,
+          answer:    offTopicReply,
+          had_image: hadImage,
+          from_db:   false,
+          off_topic: true,
+        }).catch(() => {});
+      }
+      return res.status(200).json({
+        content: [{ type: 'text', text: offTopicReply }],
+        off_topic: true,
+      });
+    }
 
-    if (supabaseUrl && supabaseKey && customerQuestion && !hadImage) {
-      try {
-        const products = await lookupProducts(supabaseUrl, supabaseKey, customerQuestion);
-        if (products && products.length > 0) {
-          productContext = formatProductContext(products);
-          foundInDb = true;
+    // ── Classify question type ─────────────────────────────────────────────
+    const qLower = customerQuestion.toLowerCase();
+    const isStoreInfoQuestion = detectStoreInfoQuestion(qLower);
+    const isHiringQuestion    = detectHiringQuestion(qLower);
+    const isAboutKindly       = detectAboutKindlyQuestion(qLower);
+
+    // ── Supabase lookups ───────────────────────────────────────────────────
+    let productContext  = '';
+    let storeContext    = '';
+    let foundInDb       = false;
+    let foundStoreInfo  = false;
+
+    if (supabaseUrl && supabaseKey) {
+      // Store info lookup — hours, addresses, hiring, about Kindly
+      if (isStoreInfoQuestion || isHiringQuestion || isAboutKindly) {
+        try {
+          const storeInfo = await fetchStoreInfo(supabaseUrl, supabaseKey);
+          if (storeInfo) {
+            storeContext   = formatStoreContext(storeInfo, isHiringQuestion);
+            foundStoreInfo = true;
+            foundInDb      = true;
+          }
+        } catch(e) {
+          console.error('Store info lookup error:', e.message);
         }
-      } catch(e) {
-        console.error('Supabase lookup error:', e.message);
+      }
+
+      // Product lookup — only if not already answered by store info
+      if (!foundStoreInfo && customerQuestion && !hadImage) {
+        try {
+          const products = await lookupProducts(supabaseUrl, supabaseKey, customerQuestion);
+          if (products && products.length > 0) {
+            productContext = formatProductContext(products);
+            foundInDb      = true;
+          }
+        } catch(e) {
+          console.error('Supabase product lookup error:', e.message);
+        }
       }
     }
 
-    // ── Build request with data source instruction ──────────────────────
-    const requestBody = { ...req.body };
+    // ── Build system prompt injection ──────────────────────────────────────
+    const requestBody    = { ...req.body };
     const existingSystem = requestBody.system || '';
 
-    if (foundInDb) {
-      requestBody.system = existingSystem +
-        '\n\n' + productContext +
-        '\n\nIMPORTANT: This answer is based on verified data from the Kindly product database. ' +
+    let contextBlock = '';
+    if (foundStoreInfo && storeContext) {
+      contextBlock = '\n\n' + storeContext +
+        '\n\nIMPORTANT: Answer using the verified Kindly store information above. ' +
+        'End your response with a new line containing exactly: ' +
+        '"📋 *From Kindly\'s store information*"';
+    } else if (foundInDb && productContext) {
+      contextBlock = '\n\n' + productContext +
+        '\n\nIMPORTANT: Answer ONLY from the verified product data above. ' +
+        'Do not supplement with general knowledge. ' +
         'End your response with a new line containing exactly: ' +
         '"📋 *From Kindly\'s product database*"';
     } else {
-      requestBody.system = existingSystem +
-        '\n\nIMPORTANT: No specific product data was found in the Kindly database for this question. ' +
+      contextBlock = '\n\nIMPORTANT: No specific data was found in the Kindly database for this question. ' +
+        'Answer only if this relates to Kindly, our products, sustainable shopping, or the Brighton community. ' +
         'Answer from your general knowledge but be appropriately cautious about specifics. ' +
         'End your response with a new line containing exactly: ' +
         '"💡 *General knowledge — product details may vary*"';
     }
 
-    // ── Call Claude ─────────────────────────────────────────────────────
+    requestBody.system = existingSystem + contextBlock;
+
+    // ── Call Claude ────────────────────────────────────────────────────────
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
+        'Content-Type':      'application/json',
+        'x-api-key':         apiKey,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify(requestBody),
@@ -85,7 +139,7 @@ export default async function handler(req, res) {
 
     const solAnswer = data.content?.[0]?.text || '';
 
-    // ── Log to Supabase (fire and forget) ───────────────────────────────
+    // ── Log question (fire and forget) ────────────────────────────────────
     if (supabaseUrl && supabaseKey && customerQuestion) {
       logQuestion({
         supabaseUrl, supabaseKey,
@@ -104,7 +158,130 @@ export default async function handler(req, res) {
 }
 
 
-// ── Product lookup with synonym expansion ─────────────────────────────────
+// ── Off-topic detection ────────────────────────────────────────────────────
+function isOffTopic(question) {
+  if (!question || question.trim().length < 3) return false;
+
+  const q = question.toLowerCase();
+
+  // Always allow anything Kindly or shopping related
+  const alwaysAllow = [
+    'kindly','vegan','organic','plastic','refill','sustainable','allergen',
+    'ingredient','gluten','dairy','nut','soy','wheat','sugar','calorie',
+    'protein','carb','fat','nutrition','price','cost','buy','stock','carry',
+    'shop','store','hours','open','close','address','location','park',
+    'delivery','online','order','loyalty','member','reward','discount',
+    'offer','bulk','loose','packaging','wrapper','bottle','container',
+    'where','when','product','brand','supplier','origin','provenance',
+    'recipe','cook','eat','drink','food','snack','meal','coffee','tea',
+    'brighton','york place','dyke road','hire','hiring','job','work','team',
+    'volunteer','apprentice','partner','fareshare','team domenica','tgtg',
+    'too good to go','award','certificate','bcorp','fairtrade',
+    'plastic free','zero waste','carbon','impact','environment','green',
+    'surprise','story','tell me','about kindly','what is kindly',
+  ];
+  if (alwaysAllow.some(term => q.includes(term))) return false;
+
+  // Block clearly off-topic subjects
+  const offTopicPatterns = [
+    /\b(weather|forecast|temperature|rain|sun|wind|snow)\b/,
+    /\b(news|politics|election|government|parliament|prime minister|president)\b/,
+    /\b(sport|football|cricket|tennis|rugby|formula.one|f1|nba|nfl)\b/,
+    /\b(movie|film|tv.show|series|netflix|disney|cinema|actor|actress)\b/,
+    /\b(music|song|artist|album|spotify|playlist|concert)\b/,
+    /\b(stock.market|crypto|bitcoin|investment|shares|trading|forex)\b/,
+    /\b(homework|essay|history|geography|maths|science|exam|revision)\b/,
+    /\b(write me|write a|generate|create an image|draw|paint|program)\b/,
+    /\b(joke|riddle|quiz|game|play|entertain)\b/,
+    /\b(relationship|dating|love|breakup|marriage|divorce)\b/,
+    /\b(medical|doctor|hospital|prescription|diagnosis|symptom)\b/,
+    /\b(legal|lawyer|sue|court|law)\b/,
+  ];
+
+  return offTopicPatterns.some(p => p.test(q));
+}
+
+function offTopicResponse() {
+  return `Hey there! ☀️ I'm Sol, Kindly's in-store product guide — I'm here to help with anything about our products, ingredients, allergens, opening hours, or anything else Kindly-related.
+
+For anything outside of that, I'm not quite the right tool! Is there something about our range I can help with? 🌱`;
+}
+
+
+// ── Question type detection ────────────────────────────────────────────────
+function detectStoreInfoQuestion(q) {
+  return /\b(open|close|opening|closing|hours|time|address|location|find you|where are|get to|park|parking|both stores|york place|dyke road)\b/.test(q);
+}
+
+function detectHiringQuestion(q) {
+  return /\b(hiring|hire|job|jobs|vacancy|vacancies|work here|recruit|employ|career|position|role|apply|application|join the team|join kindly)\b/.test(q);
+}
+
+function detectAboutKindlyQuestion(q) {
+  return /\b(about kindly|what is kindly|who are kindly|kindly story|started|founded|founder|mission|values|impact|plastic diverted|saved|co2|carbon|water|community|fareshare|team domenica|award|how many (people|staff|employees)|next for kindly|future|expand|loyalty|loyalzoo)\b/.test(q);
+}
+
+
+// ── Fetch store info from Supabase ─────────────────────────────────────────
+async function fetchStoreInfo(supabaseUrl, supabaseKey) {
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/sol_store_info?select=*`,
+    {
+      headers: {
+        'apikey':        supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Range-Unit':    'items',
+        'Range':         '0-99',
+      },
+    }
+  );
+  if (!res.ok) return null;
+  const rows = await res.json();
+  if (!rows || rows.length === 0) return null;
+
+  // Convert array of {key, value} rows into a plain object
+  const info = {};
+  for (const row of rows) {
+    if (row.key && row.value) info[row.key] = row.value;
+  }
+  return info;
+}
+
+
+// ── Format store context for Claude ───────────────────────────────────────
+function formatStoreContext(info, isHiringQuestion) {
+  const lines = ['VERIFIED KINDLY STORE INFORMATION — answer from this data:'];
+
+  if (info.york_place_address)     lines.push(`York Place address: ${info.york_place_address}`);
+  if (info.york_place_hours)       lines.push(`York Place opening hours: ${info.york_place_hours}`);
+  if (info.dyke_road_address)      lines.push(`Dyke Road address: ${info.dyke_road_address}`);
+  if (info.dyke_road_hours)        lines.push(`Dyke Road opening hours: ${info.dyke_road_hours}`);
+  if (info.website)                lines.push(`Website: ${info.website}`);
+  if (info.instagram)              lines.push(`Instagram: ${info.instagram}`);
+  if (info.facebook)               lines.push(`Facebook: ${info.facebook}`);
+  if (info.tiktok)                 lines.push(`TikTok: ${info.tiktok}`);
+  if (info.plastic_units_diverted) lines.push(`Single-use plastic units diverted to date: ${info.plastic_units_diverted}`);
+  if (info.co2_saved)              lines.push(`CO₂ saved: ${info.co2_saved}`);
+  if (info.water_saved)            lines.push(`Water saved: ${info.water_saved}`);
+  if (info.founded)                lines.push(`Founded: ${info.founded}`);
+  if (info.founder)                lines.push(`Founder: ${info.founder}`);
+  if (info.mission)                lines.push(`Mission: ${info.mission}`);
+  if (info.employees)              lines.push(`Team size: ${info.employees}`);
+  if (info.community_partners)     lines.push(`Community partners: ${info.community_partners}`);
+  if (info.awards)                 lines.push(`Awards: ${info.awards}`);
+  if (info.local_economy)          lines.push(`Local economy impact: ${info.local_economy}`);
+  if (info.loyalzoo_link)          lines.push(`Loyalty scheme: ${info.loyalzoo_link}`);
+
+  if (isHiringQuestion) {
+    if (info.jobs_page)      lines.push(`Jobs page: ${info.jobs_page}`);
+    if (info.hiring_status)  lines.push(`Current hiring status: ${info.hiring_status}`);
+  }
+
+  return lines.join('\n');
+}
+
+
+// ── Product lookup ─────────────────────────────────────────────────────────
 async function lookupProducts(supabaseUrl, supabaseKey, question) {
   const stopWords = new Set([
     'tell','me','about','your','is','are','the','a','an','what','how','much',
@@ -115,7 +292,6 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
     'stock','stocks','stocked','sell','selling','carry','carrying','got',
   ]);
 
-  // Normalise common brand/product name variations before tokenising
   let normalised = question.toLowerCase()
     .replace(/clear\s+spot/g,      'clearspot')
     .replace(/clear\s+spring/g,    'clearspring')
@@ -148,7 +324,6 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
     `free_from,vegan,organic,gluten_free,kcal,protein,carbs,fat,fibre,salt,` +
     `description,origin,impact_line`;
 
-  // Strategy 1: two-term AND match (most precise — avoids false positives)
   if (terms.length >= 2) {
     for (let i = 0; i < Math.min(terms.length - 1, 3); i++) {
       const t1 = terms[i];
@@ -166,7 +341,6 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
     }
   }
 
-  // Strategy 2: single specific term (skip generic words first)
   const genericWords = new Set([
     'organic','plain','whole','fresh','natural','raw','dried',
     'mix','seeds','beans','nuts','rice','flour','powder',
@@ -189,13 +363,12 @@ async function lookupProducts(supabaseUrl, supabaseKey, question) {
 }
 
 
-// ── Format product data as context ───────────────────────────────────────
+// ── Format product data as context ────────────────────────────────────────
 function formatProductContext(products) {
   if (!products || products.length === 0) return '';
 
   const lines = [
-    // 'VERIFIED KINDLY PRODUCT DATA — answer from this data, not general knowledge:',
-    'VERIFIED KINDLY PRODUCT DATA — use this to answer naturally in 2-4 sentences. DO NOT list all fields. Pick the most relevant facts for the question asked. Never format as a product card or use bullet points.',
+    'VERIFIED KINDLY PRODUCT DATA — answer from this data, not general knowledge:',
   ];
 
   for (const p of products) {
@@ -228,7 +401,7 @@ function formatProductContext(products) {
 
 
 // ── Log question to Supabase ──────────────────────────────────────────────
-async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image, from_db }) {
+async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image, from_db, off_topic }) {
   await fetch(`${supabaseUrl}/rest/v1/sol_question_log`, {
     method: 'POST',
     headers: {
@@ -241,8 +414,9 @@ async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_ima
       question,
       answer,
       had_image,
-      from_db:  from_db || false,
-      asked_at: new Date().toISOString(),
+      from_db:   from_db  || false,
+      off_topic: off_topic || false,
+      asked_at:  new Date().toISOString(),
     }),
   });
 }
