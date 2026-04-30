@@ -85,6 +85,8 @@
   .impact-stat{text-align:center;flex-shrink:0}
   .impact-stat .num{font-size:15px;font-weight:600;color:#ff0054}
   .impact-stat .lbl{font-size:10px;color:#888;margin-top:1px}
+  .filter-opt{padding:12px 10px;border:1.5px solid #ffb3c8;background:white;color:#ff0054;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;text-align:center;}
+  .filter-opt:active{background:#fff0f5;transform:scale(0.97);}
 </style>
 </head>
 <body>
@@ -99,7 +101,7 @@
 </div>
 
 <div class="impact-banner">
-  <div class="impact-stat"><div class="num">370K+</div><div class="lbl">plastics diverted</div></div>
+  <div class="impact-stat"><div class="num" id="plastic-counter">370K+</div><div class="lbl">plastics diverted</div></div>
   <div class="impact-stat"><div class="num">66t</div><div class="lbl">CO₂ saved</div></div>
   <div class="impact-stat"><div class="num">66p</div><div class="lbl">stays in Brighton</div></div>
   <div class="impact-stat"><div class="num">75%</div><div class="lbl">return customers</div></div>
@@ -118,7 +120,7 @@
     <span class="btn-icon">📷</span>
     Scan
   </button>
-  <button class="action-btn" onclick="sendQuick('Tell me about the Kindly loyalty scheme and how to sign up')">
+  <button class="action-btn" onclick="sendQuick('Tell me about the Kindly loyalty scheme and how to sign up - Wwhat is the link?')">
     <span class="btn-icon">⭐</span>
     Loyalty
   </button>
@@ -130,9 +132,63 @@
 
 <!-- ── Secondary quick chips ── -->
 <div class="quick-actions">
-  <button class="quick-btn" onclick="sendQuick('Is everything in the store vegan?')">Is everything vegan?</button>
+  <button class="quick-btn" onclick="sendQuick('Is this vegan? 🌱')">Is this vegan? 🌱</button>
+  <button class="quick-btn" onclick="sendQuick('What\'s in this? 🔍')">What\'s in this? 🔍</button>
+  <button class="quick-btn" onclick="showDietaryFilter()">Dietary filter 🥗</button>
+  <button class="quick-btn" onclick="showRecipePrompt()">Recipe idea 🍳</button>
+  <button class="quick-btn" onclick="showBasketPrompt()">Build a basket 🛒</button>
   <button class="quick-btn" onclick="sendQuick('Tell me about Kindly\'s environmental impact')">Our impact</button>
   <button class="quick-btn" onclick="sendQuick('Surprise me with a product story!')">Surprise me!</button>
+</div>
+
+<!-- ── Dietary filter modal ── -->
+<div id="dietary-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:flex-end;justify-content:center;">
+  <div style="background:white;border-radius:20px 20px 0 0;padding:24px 20px 36px;width:100%;max-width:480px;">
+    <div style="font-weight:700;font-size:16px;color:#1a0a0f;margin-bottom:6px;">Dietary filter 🥗</div>
+    <div style="font-size:13px;color:#888;margin-bottom:16px;">What are you looking for?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <button class="filter-opt" onclick="applyDietaryFilter('gluten free')">🌾 Gluten free</button>
+      <button class="filter-opt" onclick="applyDietaryFilter('vegan')">🌱 Vegan</button>
+      <button class="filter-opt" onclick="applyDietaryFilter('dairy free')">🥛 Dairy free</button>
+      <button class="filter-opt" onclick="applyDietaryFilter('organic')">🌿 Organic</button>
+      <button class="filter-opt" onclick="applyDietaryFilter('nut free')">🥜 Nut free</button>
+      <button class="filter-opt" onclick="applyDietaryFilter('soy free')">🫘 Soy free</button>
+    </div>
+    <div style="font-size:13px;color:#888;margin-bottom:8px;">Any category in mind? (optional)</div>
+    <input id="diet-category" type="text" placeholder="e.g. pasta, snacks, bread, chocolate..." 
+      style="width:100%;padding:10px 14px;border:1px solid #ffb3c8;border-radius:12px;font-size:14px;outline:none;margin-bottom:16px;font-family:inherit;">
+    <button onclick="closeDietaryModal()" style="width:100%;padding:12px;border:1px solid #ffb3c8;background:white;color:#ff0054;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">Cancel</button>
+  </div>
+</div>
+
+<!-- ── Recipe modal ── -->
+<div id="recipe-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:flex-end;justify-content:center;">
+  <div style="background:white;border-radius:20px 20px 0 0;padding:24px 20px 36px;width:100%;max-width:480px;">
+    <div style="font-weight:700;font-size:16px;color:#1a0a0f;margin-bottom:6px;">Recipe idea 🍳</div>
+    <div style="font-size:13px;color:#888;margin-bottom:16px;">What product or ingredient do you want to cook with?</div>
+    <input id="recipe-input" type="text" placeholder="e.g. chickpeas, miso paste, oat flour..."
+      style="width:100%;padding:10px 14px;border:1px solid #ffb3c8;border-radius:12px;font-size:14px;outline:none;margin-bottom:12px;font-family:inherit;">
+    <div style="font-size:12px;color:#aaa;margin-bottom:16px;">Sol will suggest a simple recipe using products Kindly stocks.</div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="closeRecipeModal()" style="flex:1;padding:12px;border:1px solid #ffb3c8;background:white;color:#ff0054;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">Cancel</button>
+      <button onclick="submitRecipe()" style="flex:1;padding:12px;border:none;background:#ff0054;color:white;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">Get recipe ✨</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Basket builder modal ── -->
+<div id="basket-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:flex-end;justify-content:center;">
+  <div style="background:white;border-radius:20px 20px 0 0;padding:24px 20px 36px;width:100%;max-width:480px;">
+    <div style="font-weight:700;font-size:16px;color:#1a0a0f;margin-bottom:6px;">Build a basket 🛒</div>
+    <div style="font-size:13px;color:#888;margin-bottom:16px;">What are you looking to make or eat?</div>
+    <input id="basket-input" type="text" placeholder="e.g. vegan Thai curry, quick packed lunch, high protein breakfast..."
+      style="width:100%;padding:10px 14px;border:1px solid #ffb3c8;border-radius:12px;font-size:14px;outline:none;margin-bottom:12px;font-family:inherit;">
+    <div style="font-size:12px;color:#aaa;margin-bottom:16px;">Sol will suggest products from Kindly that fit your meal idea.</div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="closeBasketModal()" style="flex:1;padding:12px;border:1px solid #ffb3c8;background:white;color:#ff0054;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">Cancel</button>
+      <button onclick="submitBasket()" style="flex:1;padding:12px;border:none;background:#ff0054;color:white;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">Build it ✨</button>
+    </div>
+  </div>
 </div>
 
 <div class="input-area">
@@ -176,7 +232,7 @@ Mon–Sat  9:00am – 6:00pm
 Sunday  10:00am – 4:00pm
 
 LOYALTY SCHEME:
-Kindly uses LoyalZoo. Every £1 spent earns points redeemable for discounts. Sign up at the till — takes 30 seconds. When relevant, mention it warmly as a genuine tip: "By the way, the Kindly loyalty scheme is worth signing up for — every £1 adds up and the team can sort it at the till in 30 seconds."
+Kindly uses LoyalZoo. Every £1 spent earns points redeemable for discounts. Sign up at https://start.mylty.co?id=21913 — takes 30 seconds. When relevant, mention it warmly as a genuine tip.
 
 ALLERGEN RULES — NON-NEGOTIABLE:
 Never say "yes it's safe" outright. Always add: "For severe allergies, check the physical label and speak to staff — they'll know."
@@ -299,7 +355,7 @@ async function sendMessage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 600,
+        max_tokens: 400,
         system: SYSTEM_PROMPT,
         messages: messages
       })
@@ -325,6 +381,106 @@ async function sendMessage() {
   isLoading = false;
   document.getElementById('send-btn').disabled = false;
 }
+
+// ── Dietary filter ─────────────────────────────────────────────────────────
+function showDietaryFilter() {
+  const modal = document.getElementById('dietary-modal');
+  modal.style.display = 'flex';
+  document.getElementById('diet-category').value = '';
+}
+
+function closeDietaryModal() {
+  document.getElementById('dietary-modal').style.display = 'none';
+}
+
+function applyDietaryFilter(diet) {
+  const category = document.getElementById('diet-category').value.trim();
+  closeDietaryModal();
+  let query = '';
+  if (category) {
+    query = `I'm ${diet} — what ${category} options do you have at Kindly?`;
+  } else {
+    query = `I'm ${diet} — what products do you recommend at Kindly?`;
+  }
+  sendQuick(query);
+}
+
+// ── Recipe idea ────────────────────────────────────────────────────────────
+function showRecipePrompt() {
+  const modal = document.getElementById('recipe-modal');
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('recipe-input').focus(), 100);
+}
+
+function closeRecipeModal() {
+  document.getElementById('recipe-modal').style.display = 'none';
+}
+
+function submitRecipe() {
+  const ingredient = document.getElementById('recipe-input').value.trim();
+  closeRecipeModal();
+  if (!ingredient) {
+    sendQuick('Give me a recipe idea using something from Kindly');
+    return;
+  }
+  sendQuick(`Give me a simple recipe idea using ${ingredient} — ideally with other products Kindly stocks`);
+}
+
+// ── Basket builder ─────────────────────────────────────────────────────────
+function showBasketPrompt() {
+  const modal = document.getElementById('basket-modal');
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('basket-input').focus(), 100);
+}
+
+function closeBasketModal() {
+  document.getElementById('basket-modal').style.display = 'none';
+}
+
+function submitBasket() {
+  const meal = document.getElementById('basket-input').value.trim();
+  closeBasketModal();
+  if (!meal) {
+    sendQuick('Help me build a basket of products from Kindly for a quick healthy meal');
+    return;
+  }
+  sendQuick(`Help me build a basket from Kindly for: ${meal}. What products should I pick up?`);
+}
+
+// Close modals on backdrop tap
+['dietary-modal','recipe-modal','basket-modal'].forEach(id => {
+  document.getElementById(id).addEventListener('click', function(e) {
+    if (e.target === this) this.style.display = 'none';
+  });
+});
+
+// ── Live plastic counter — fetch from Supabase on page load ───────────────
+async function loadPlasticCounter() {
+  try {
+    const SUPABASE_URL = '/api/store-info'; // routed through our proxy
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ _action: 'get_plastic_counter' })
+    });
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data.plastic_counter) {
+      // Format e.g. 344412 → "344K+"
+      const n = parseInt(data.plastic_counter.replace(/[^0-9]/g, ''));
+      if (!isNaN(n) && n > 1000) {
+        const formatted = n >= 1000000
+          ? Math.floor(n / 100000) / 10 + 'M+'
+          : Math.floor(n / 1000) + 'K+';
+        document.getElementById('plastic-counter').textContent = formatted;
+      }
+    }
+  } catch(e) {
+    // Silently fail — fallback stays as 370K+
+  }
+}
+
+loadPlasticCounter();
 </script>
 </body>
 </html>
