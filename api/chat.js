@@ -16,6 +16,22 @@ export default async function handler(req, res) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_KEY;
 
+  // ── Special action: return plastic counter for the UI banner ─────────────
+  if (req.body && req.body._action === 'get_plastic_counter') {
+    if (supabaseUrl && supabaseKey) {
+      try {
+        const storeInfo = await fetchStoreInfo(supabaseUrl, supabaseKey);
+        const counter = storeInfo && storeInfo.plastic_units_diverted
+          ? storeInfo.plastic_units_diverted
+          : null;
+        return res.status(200).json({ plastic_counter: counter });
+      } catch(e) {
+        return res.status(200).json({ plastic_counter: null });
+      }
+    }
+    return res.status(200).json({ plastic_counter: null });
+  }
+
   if (!apiKey) return res.status(500).json({ error: 'API key not configured' });
 
   try {
@@ -62,6 +78,7 @@ export default async function handler(req, res) {
     const isHiringQuestion    = detectHiringQuestion(qLower);
     const isAboutKindly       = detectAboutKindlyQuestion(qLower);
     const isSurpriseMe        = detectSurpriseMe(qLower);
+    const dietaryFilter       = detectDietaryFilter(qLower);
 
     // ── Supabase lookups ───────────────────────────────────────────────────
     let productContext  = '';
@@ -98,8 +115,25 @@ export default async function handler(req, res) {
         }
       }
 
+      // Dietary filter lookup — query by flag + optional category
+      if (!foundStoreInfo && !isSurpriseMe && dietaryFilter.diet) {
+        try {
+          const products = await lookupByDietaryFilter(
+            supabaseUrl, supabaseKey,
+            dietaryFilter.diet,
+            dietaryFilter.category
+          );
+          if (products && products.length > 0) {
+            productContext = formatDietaryResults(products, dietaryFilter.diet, dietaryFilter.category);
+            foundInDb      = true;
+          }
+        } catch(e) {
+          console.error('Dietary filter lookup error:', e.message);
+        }
+      }
+
       // Product lookup — only if not already answered by store info or surprise
-      if (!foundStoreInfo && !isSurpriseMe && customerQuestion && !hadImage) {
+      if (!foundStoreInfo && !isSurpriseMe && !dietaryFilter.diet && customerQuestion && !hadImage) {
         try {
           const products = await lookupProducts(supabaseUrl, supabaseKey, customerQuestion);
           if (products && products.length > 0) {
@@ -117,7 +151,15 @@ export default async function handler(req, res) {
     const existingSystem = requestBody.system || '';
 
     let contextBlock = '';
-    if (isSurpriseMe && foundInDb && productContext) {
+    if (dietaryFilter.diet && foundInDb && productContext) {
+      contextBlock = '\n\n' + productContext +
+        `\n\nIMPORTANT: The customer is looking for ${dietaryFilter.diet} products` +
+        (dietaryFilter.category ? ` in the ${dietaryFilter.category} category` : '') +
+        '. List the products clearly with their key benefits. ' +
+        'Be specific and helpful — this is exactly what they need to know to shop confidently. ' +
+        'End with a note that they can ask Sol about any specific product for more detail. ' +
+        '\nEnd your response with: "📋 *From Kindly\'s product database*"';
+    } else if (isSurpriseMe && foundInDb && productContext) {
       contextBlock = '\n\n' + productContext +
         '\n\nIMPORTANT: The customer wants to be surprised with a product story. ' +
         'Tell the story of this product in Sol\'s warm Brighton personality — where it comes from, ' +
@@ -254,6 +296,43 @@ For anything outside of that, I'm not quite the right tool! Is there something a
 
 
 // ── Question type detection ────────────────────────────────────────────────
+function detectDietaryFilter(q) {
+  // Returns {diet, category} or {diet: null}
+  const dietMap = {
+    'gluten free':  ['gluten free', 'gluten-free', 'coeliac', 'celiac', 'no gluten', 'wheat free', 'wheat-free'],
+    'vegan':        ['vegan', "i'm vegan", 'plant based', 'plant-based'],
+    'dairy free':   ['dairy free', 'dairy-free', 'lactose', 'no dairy', 'no milk'],
+    'organic':      ['organic only', 'only organic', 'all organic'],
+    'nut free':     ['nut free', 'nut-free', 'no nuts', 'nut allergy'],
+    'soy free':     ['soy free', 'soy-free', 'no soy', 'no soya', 'soya free'],
+  };
+
+  let matchedDiet = null;
+  for (const [diet, keywords] of Object.entries(dietMap)) {
+    if (keywords.some(kw => q.includes(kw))) {
+      matchedDiet = diet;
+      break;
+    }
+  }
+  if (!matchedDiet) return { diet: null };
+
+  // Extract category if mentioned
+  const categoryKeywords = [
+    'pasta','bread','snack','snacks','biscuit','biscuits','chocolate','cereal',
+    'flour','milk','cheese','yogurt','yoghurt','sauce','soup','rice','noodle',
+    'noodles','cracker','crackers','cake','cakes','bar','bars','spread','butter',
+    'oil','vinegar','condiment','drink','drinks','juice','tea','coffee',
+    'protein','supplement','grain','grains','seed','seeds','nut','nuts',
+    'dried fruit','fruit','vegetable','veg','frozen','chilled','fresh',
+  ];
+  let category = null;
+  for (const kw of categoryKeywords) {
+    if (q.includes(kw)) { category = kw; break; }
+  }
+
+  return { diet: matchedDiet, category };
+}
+
 function detectSurpriseMe(q) {
   return /(surprise|surprise me|product story|tell me a story|random product|what's interesting|what\'s interesting|something interesting|something cool|something special|recommend something|pick something|choose something|what should i try)/.test(q);
 }
@@ -270,6 +349,88 @@ function detectAboutKindlyQuestion(q) {
   return /\b(about kindly|what is kindly|who are kindly|kindly story|started|founded|founder|mission|values|impact|environmental|sustainability|plastic diverted|plastic saved|units saved|units diverted|co2|carbon|water|community|fareshare|team domenica|award|accolade|how many (people|staff|employees)|next for kindly|future|expand|loyalty|loyalzoo|local economy|reinvest|brighton economy)\b/.test(q);
 }
 
+
+// ── Dietary filter product lookup ─────────────────────────────────────────
+async function lookupByDietaryFilter(supabaseUrl, supabaseKey, diet, category) {
+  // Map diet name to Supabase column
+  const dietColMap = {
+    'gluten free': 'gluten_free',
+    'vegan':       'vegan',
+    'dairy free':  'free_from',  // check free_from contains dairy
+    'organic':     'organic',
+    'nut free':    'free_from',
+    'soy free':    'free_from',
+  };
+
+  const fields = 'product_name,brand,supplier,description,vegan,organic,gluten_free,free_from,allergens,impact_line';
+  let url = `${supabaseUrl}/rest/v1/sol_products?approved=eq.true`;
+
+  // Apply dietary flag filter
+  if (diet === 'vegan') {
+    url += `&vegan=ilike.*yes*`;
+  } else if (diet === 'gluten free') {
+    url += `&gluten_free=ilike.*yes*`;
+  } else if (diet === 'organic') {
+    url += `&organic=ilike.*yes*`;
+  } else if (diet === 'dairy free' || diet === 'nut free' || diet === 'soy free') {
+    // These use the free_from field
+    const term = diet === 'dairy free' ? 'dairy' : diet === 'nut free' ? 'nut' : 'soy';
+    url += `&free_from=ilike.*${term}*`;
+  }
+
+  // Apply category filter if provided
+  if (category) {
+    url += `&product_name=ilike.*${encodeURIComponent(category)}*`;
+  }
+
+  url += `&limit=12&select=${fields}`;
+
+  const res = await fetch(url, {
+    headers: {
+      'apikey':        supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
+      'Range-Unit':    'items',
+      'Range':         '0-11',
+    },
+  });
+
+  if (!res.ok) return null;
+  const rows = await res.json();
+
+  // If category filter returned nothing, try without it
+  if ((!rows || rows.length === 0) && category) {
+    const urlNoCategory = url
+      .replace(`&product_name=ilike.*${encodeURIComponent(category)}*`, '')
+      .replace('&limit=12', '&limit=8');
+    const res2 = await fetch(urlNoCategory, {
+      headers: {
+        'apikey':        supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Range-Unit':    'items',
+        'Range':         '0-7',
+      },
+    });
+    if (!res2.ok) return null;
+    return await res2.json();
+  }
+
+  return rows;
+}
+
+function formatDietaryResults(products, diet, category) {
+  if (!products || products.length === 0) return '';
+  const lines = [
+    `DIETARY FILTER RESULTS — ${diet.toUpperCase()}${category ? ' / ' + category.toUpperCase() : ''}:`,
+    `Found ${products.length} matching products in Kindly's database:`,
+  ];
+  for (const p of products) {
+    let line = `• ${p.product_name}`;
+    if (p.brand) line += ` (${p.brand})`;
+    if (p.description) line += ` — ${p.description.substring(0, 80)}`;
+    lines.push(line);
+  }
+  return lines.join('\n');
+}
 
 // ── Fetch a random product with a story from Supabase ────────────────────
 async function fetchRandomProductStory(supabaseUrl, supabaseKey) {
