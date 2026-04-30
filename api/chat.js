@@ -352,69 +352,57 @@ function detectAboutKindlyQuestion(q) {
 
 // ── Dietary filter product lookup ─────────────────────────────────────────
 async function lookupByDietaryFilter(supabaseUrl, supabaseKey, diet, category) {
-  // Map diet name to Supabase column
-  const dietColMap = {
-    'gluten free': 'gluten_free',
-    'vegan':       'vegan',
-    'dairy free':  'free_from',  // check free_from contains dairy
-    'organic':     'organic',
-    'nut free':    'free_from',
-    'soy free':    'free_from',
+  const fields = 'product_name,brand,supplier,description,vegan,organic,gluten_free,free_from,allergens,impact_line';
+  const headers = {
+    'apikey':        supabaseKey,
+    'Authorization': `Bearer ${supabaseKey}`,
+    'Range-Unit':    'items',
+    'Range':         '0-11',
   };
 
-  const fields = 'product_name,brand,supplier,description,vegan,organic,gluten_free,free_from,allergens,impact_line';
-  let url = `${supabaseUrl}/rest/v1/sol_products?approved=eq.true`;
-
-  // Apply dietary flag filter
-  if (diet === 'vegan') {
-    url += `&vegan=ilike.*yes*`;
-  } else if (diet === 'gluten free') {
-    url += `&gluten_free=ilike.*yes*`;
-  } else if (diet === 'organic') {
-    url += `&organic=ilike.*yes*`;
-  } else if (diet === 'dairy free' || diet === 'nut free' || diet === 'soy free') {
-    // These use the free_from field
-    const term = diet === 'dairy free' ? 'dairy' : diet === 'nut free' ? 'nut' : 'soy';
-    url += `&free_from=ilike.*${term}*`;
+  // Build dietary flag filter — handles "1", "yes", "Yes", "YES", "true", "True" etc
+  // Uses OR logic across all truthy representations via Supabase's ilike
+  function dietFlag(col, term) {
+    // For free_from/allergens text fields, search for the term
+    if (col === 'free_from' || col === 'allergens') {
+      return `&${col}=ilike.*${term}*`;
+    }
+    // For flag columns (1/0 or yes/no), accept both formats
+    return `&or=(${col}.ilike.*yes*,${col}.ilike.*1*,${col}.ilike.*true*)`;
   }
 
-  // Apply category filter if provided
+  let flagParam = '';
+  if (diet === 'vegan')       flagParam = dietFlag('vegan', '');
+  else if (diet === 'gluten free') flagParam = dietFlag('gluten_free', '');
+  else if (diet === 'organic') flagParam = dietFlag('organic', '');
+  else if (diet === 'dairy free') flagParam = dietFlag('free_from', 'dairy');
+  else if (diet === 'nut free')   flagParam = dietFlag('free_from', 'nut');
+  else if (diet === 'soy free')   flagParam = dietFlag('free_from', 'soy');
+
+  // Category search — try product_name, description, AND category column
+  // Use OR across all three fields so "bread" matches any of them
+  function categoryParam(cat) {
+    const enc = encodeURIComponent(cat);
+    return `&or=(product_name.ilike.*${enc}*,description.ilike.*${enc}*,category.ilike.*${enc}*)`;
+  }
+
+  async function runQuery(withCategory) {
+    let url = `${supabaseUrl}/rest/v1/sol_products?approved=eq.true` + flagParam;
+    if (withCategory && category) url += categoryParam(category);
+    url += `&limit=12&select=${fields}`;
+    const res = await fetch(url, { headers });
+    if (!res.ok) return null;
+    return await res.json();
+  }
+
+  // Try with category first, fall back without if no results
   if (category) {
-    url += `&product_name=ilike.*${encodeURIComponent(category)}*`;
+    const withCat = await runQuery(true);
+    if (withCat && withCat.length > 0) return withCat;
   }
 
-  url += `&limit=12&select=${fields}`;
-
-  const res = await fetch(url, {
-    headers: {
-      'apikey':        supabaseKey,
-      'Authorization': `Bearer ${supabaseKey}`,
-      'Range-Unit':    'items',
-      'Range':         '0-11',
-    },
-  });
-
-  if (!res.ok) return null;
-  const rows = await res.json();
-
-  // If category filter returned nothing, try without it
-  if ((!rows || rows.length === 0) && category) {
-    const urlNoCategory = url
-      .replace(`&product_name=ilike.*${encodeURIComponent(category)}*`, '')
-      .replace('&limit=12', '&limit=8');
-    const res2 = await fetch(urlNoCategory, {
-      headers: {
-        'apikey':        supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Range-Unit':    'items',
-        'Range':         '0-7',
-      },
-    });
-    if (!res2.ok) return null;
-    return await res2.json();
-  }
-
-  return rows;
+  // No category or no results with category — return without category filter
+  return await runQuery(false);
 }
 
 function formatDietaryResults(products, diet, category) {
