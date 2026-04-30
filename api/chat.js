@@ -61,6 +61,7 @@ export default async function handler(req, res) {
     const isStoreInfoQuestion = detectStoreInfoQuestion(qLower);
     const isHiringQuestion    = detectHiringQuestion(qLower);
     const isAboutKindly       = detectAboutKindlyQuestion(qLower);
+    const isSurpriseMe        = detectSurpriseMe(qLower);
 
     // ── Supabase lookups ───────────────────────────────────────────────────
     let productContext  = '';
@@ -69,8 +70,22 @@ export default async function handler(req, res) {
     let foundStoreInfo  = false;
 
     if (supabaseUrl && supabaseKey) {
+
+      // Surprise me — fetch a random product with a supplier story
+      if (isSurpriseMe) {
+        try {
+          const storyProduct = await fetchRandomProductStory(supabaseUrl, supabaseKey);
+          if (storyProduct) {
+            productContext = formatProductStoryContext(storyProduct);
+            foundInDb      = true;
+          }
+        } catch(e) {
+          console.error('Random story lookup error:', e.message);
+        }
+      }
+
       // Store info lookup — hours, addresses, hiring, about Kindly
-      if (isStoreInfoQuestion || isHiringQuestion || isAboutKindly) {
+      if (!isSurpriseMe && (isStoreInfoQuestion || isHiringQuestion || isAboutKindly)) {
         try {
           const storeInfo = await fetchStoreInfo(supabaseUrl, supabaseKey);
           if (storeInfo) {
@@ -83,8 +98,8 @@ export default async function handler(req, res) {
         }
       }
 
-      // Product lookup — only if not already answered by store info
-      if (!foundStoreInfo && customerQuestion && !hadImage) {
+      // Product lookup — only if not already answered by store info or surprise
+      if (!foundStoreInfo && !isSurpriseMe && customerQuestion && !hadImage) {
         try {
           const products = await lookupProducts(supabaseUrl, supabaseKey, customerQuestion);
           if (products && products.length > 0) {
@@ -102,7 +117,15 @@ export default async function handler(req, res) {
     const existingSystem = requestBody.system || '';
 
     let contextBlock = '';
-    if (foundStoreInfo && storeContext) {
+    if (isSurpriseMe && foundInDb && productContext) {
+      contextBlock = '\n\n' + productContext +
+        '\n\nIMPORTANT: The customer wants to be surprised with a product story. ' +
+        'Tell the story of this product in Sol\'s warm Brighton personality — where it comes from, ' +
+        'who makes it, why it\'s special, what makes it a Kindly favourite. ' +
+        'Make it feel like a recommendation from a knowledgeable friend, not a product description. ' +
+        '2-3 sentences max. End with a fun emoji. ' +
+        'Do NOT append any database indicator.';
+    } else if (foundStoreInfo && storeContext) {
       contextBlock = '\n\n' + storeContext +
         '\n\nIMPORTANT: Answer using the verified Kindly store information above. ' +
         'End your response with a new line containing exactly: ' +
@@ -147,14 +170,25 @@ export default async function handler(req, res) {
 
     const solAnswer = data.content?.[0]?.text || '';
 
+    // ── Extract product name from Sol's answer (for image queries) ──────────
+    let identifiedProduct = '';
+    if (hadImage && solAnswer) {
+      // Sol typically says "I can see [Product Name]" or "This is [Product Name]"
+      const productMatch = solAnswer.match(
+        /(?:this is|i can see|looking at|that\'s|that is|i see)\s+(?:a\s+)?([A-Z][\w\s&'-]{3,50}?)(?:\.|\/|,|\s+by\s+|\s+from\s+|\s+—|\s+which|\s+that|\s+is|\s+\()/i
+      );
+      if (productMatch) identifiedProduct = productMatch[1].trim();
+    }
+
     // ── Log question (fire and forget) ────────────────────────────────────
     if (supabaseUrl && supabaseKey && customerQuestion) {
       logQuestion({
         supabaseUrl, supabaseKey,
-        question:  customerQuestion,
-        answer:    solAnswer,
-        had_image: hadImage,
-        from_db:   foundInDb,
+        question:           customerQuestion,
+        answer:             solAnswer,
+        had_image:          hadImage,
+        from_db:            foundInDb,
+        identified_product: identifiedProduct,
       }).catch(err => console.error('Log error:', err));
     }
 
@@ -220,6 +254,10 @@ For anything outside of that, I'm not quite the right tool! Is there something a
 
 
 // ── Question type detection ────────────────────────────────────────────────
+function detectSurpriseMe(q) {
+  return /(surprise|surprise me|product story|tell me a story|random product|what's interesting|what\'s interesting|something interesting|something cool|something special|recommend something|pick something|choose something|what should i try)/.test(q);
+}
+
 function detectStoreInfoQuestion(q) {
   return /\b(open|close|opening|closing|hours|time|address|location|find you|where are|get to|park|parking|both stores|york place|dyke road)\b/.test(q);
 }
@@ -232,6 +270,63 @@ function detectAboutKindlyQuestion(q) {
   return /\b(about kindly|what is kindly|who are kindly|kindly story|started|founded|founder|mission|values|impact|environmental|sustainability|plastic diverted|plastic saved|units saved|units diverted|co2|carbon|water|community|fareshare|team domenica|award|accolade|how many (people|staff|employees)|next for kindly|future|expand|loyalty|loyalzoo|local economy|reinvest|brighton economy)\b/.test(q);
 }
 
+
+// ── Fetch a random product with a story from Supabase ────────────────────
+async function fetchRandomProductStory(supabaseUrl, supabaseKey) {
+  // Fetch products that have either a supplier_story or impact_line
+  // Use offset randomisation to get a different one each time
+  const randomOffset = Math.floor(Math.random() * 50);
+  const res = await fetch(
+    `${supabaseUrl}/rest/v1/sol_products?approved=eq.true` +
+    `&supplier_story=not.is.null&supplier_story=neq.` +
+    `&select=product_name,brand,supplier,supplier_story,impact_line,origin,description` +
+    `&limit=1&offset=${randomOffset}`,
+    {
+      headers: {
+        'apikey':        supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Range-Unit':    'items',
+        'Range':         '0-0',
+      },
+    }
+  );
+  if (!res.ok) return null;
+  const rows = await res.json();
+  // If offset too large, fall back to offset 0
+  if (!rows || rows.length === 0) {
+    const res2 = await fetch(
+      `${supabaseUrl}/rest/v1/sol_products?approved=eq.true` +
+      `&supplier_story=not.is.null` +
+      `&select=product_name,brand,supplier,supplier_story,impact_line,origin,description` +
+      `&limit=1&offset=0`,
+      {
+        headers: {
+          'apikey':        supabaseKey,
+          'Authorization': `Bearer ${supabaseKey}`,
+          'Range-Unit':    'items',
+          'Range':         '0-0',
+        },
+      }
+    );
+    if (!res2.ok) return null;
+    const rows2 = await res2.json();
+    return rows2?.[0] || null;
+  }
+  return rows[0];
+}
+
+function formatProductStoryContext(p) {
+  if (!p) return '';
+  const lines = ['PRODUCT STORY DATA — use this to tell a surprise product story:'];
+  if (p.product_name) lines.push(`Product: ${p.product_name}`);
+  if (p.brand)        lines.push(`Brand: ${p.brand}`);
+  if (p.supplier)     lines.push(`Supplier: ${p.supplier}`);
+  if (p.origin)       lines.push(`Origin: ${p.origin}`);
+  if (p.supplier_story) lines.push(`Story: ${p.supplier_story}`);
+  if (p.impact_line)  lines.push(`Impact: ${p.impact_line}`);
+  if (p.description)  lines.push(`Description: ${p.description}`);
+  return lines.join('\n');
+}
 
 // ── Fetch store info from Supabase ─────────────────────────────────────────
 async function fetchStoreInfo(supabaseUrl, supabaseKey) {
@@ -412,7 +507,7 @@ function formatProductContext(products) {
 
 
 // ── Log question to Supabase ──────────────────────────────────────────────
-async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image, from_db, off_topic }) {
+async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image, from_db, off_topic, identified_product }) {
   await fetch(`${supabaseUrl}/rest/v1/sol_question_log`, {
     method: 'POST',
     headers: {
@@ -425,9 +520,10 @@ async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_ima
       question,
       answer,
       had_image,
-      from_db:   from_db  || false,
-      off_topic: off_topic || false,
-      asked_at:  new Date().toISOString(),
+      from_db:            from_db  || false,
+      off_topic:          off_topic || false,
+      identified_product: identified_product || '',
+      asked_at:           new Date().toISOString(),
     }),
   });
 }
