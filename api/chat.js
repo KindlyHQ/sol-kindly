@@ -79,6 +79,8 @@ export default async function handler(req, res) {
     const isAboutKindly       = detectAboutKindlyQuestion(qLower);
     const isSurpriseMe        = detectSurpriseMe(qLower);
     const dietaryFilter       = detectDietaryFilter(qLower);
+    const isBasketBuilder     = detectBasketBuilder(qLower);
+    const isRecipeRequest     = detectRecipeRequest(qLower);
 
     // ── Supabase lookups ───────────────────────────────────────────────────
     let productContext  = '';
@@ -132,8 +134,21 @@ export default async function handler(req, res) {
         }
       }
 
+      // Basket builder — pre-fetch real products from DB for meal query
+      if (!foundStoreInfo && !isSurpriseMe && !dietaryFilter.diet && isBasketBuilder) {
+        try {
+          const basketProducts = await lookupBasketProducts(supabaseUrl, supabaseKey, customerQuestion);
+          if (basketProducts && basketProducts.length > 0) {
+            productContext = formatBasketContext(basketProducts, customerQuestion);
+            foundInDb      = true;
+          }
+        } catch(e) {
+          console.error('Basket lookup error:', e.message);
+        }
+      }
+
       // Product lookup — only if not already answered by store info or surprise
-      if (!foundStoreInfo && !isSurpriseMe && !dietaryFilter.diet && customerQuestion && !hadImage) {
+      if (!foundStoreInfo && !isSurpriseMe && !dietaryFilter.diet && !isBasketBuilder && customerQuestion && !hadImage) {
         try {
           const products = await lookupProducts(supabaseUrl, supabaseKey, customerQuestion);
           if (products && products.length > 0) {
@@ -151,7 +166,14 @@ export default async function handler(req, res) {
     const existingSystem = requestBody.system || '';
 
     let contextBlock = '';
-    if (dietaryFilter.diet && foundInDb && productContext) {
+    if (isBasketBuilder && foundInDb && productContext) {
+      contextBlock = '\n\n' + productContext +
+        '\n\nIMPORTANT: Build a basket suggestion using ONLY the specific Kindly products listed above. ' +
+        'Name each product exactly as listed. For refill products note they are plastic-free. ' +
+        'For non-refill items say nothing about packaging — do NOT say "everything is zero-waste". ' +
+        'Keep it to 5-6 items max. End with "Ask the team if you need help finding anything!" ' +
+        '\nEnd with: "📋 *From Kindly\'s product database*"';
+    } else if (dietaryFilter.diet && foundInDb && productContext) {
       contextBlock = '\n\n' + productContext +
         `\n\nIMPORTANT: The customer is looking for ${dietaryFilter.diet} products` +
         (dietaryFilter.category ? ` in the ${dietaryFilter.category} category` : '') +
@@ -296,6 +318,14 @@ For anything outside of that, I'm not quite the right tool! Is there something a
 
 
 // ── Question type detection ────────────────────────────────────────────────
+function detectBasketBuilder(q) {
+  return /\b(build.*(basket|shop|list)|basket.*for|shop.*for|what.*pick up|what.*buy|what.*get|help me.*make|products.*for|suggest.*for|build me|make a.*meal|meal.*idea|cook.*tonight|what.*stock.*for|ingredients.*for)\b/.test(q);
+}
+
+function detectRecipeRequest(q) {
+  return /\b(recipe|how.*cook|how.*make|what.*make with|cook with|dish.*with|meal.*with|ideas.*with|use.*for cooking|bake.*with)\b/.test(q);
+}
+
 function detectDietaryFilter(q) {
   // Returns {diet, category} or {diet: null}
   const dietMap = {
@@ -403,6 +433,104 @@ async function lookupByDietaryFilter(supabaseUrl, supabaseKey, diet, category) {
 
   // No category or no results with category — return without category filter
   return await runQuery(false);
+}
+
+// ── Meal to ingredient keyword map ───────────────────────────────────────
+const MEAL_KEYWORD_MAP = {
+  // Lunches
+  'packed lunch':     ['bread','spread','hummus','salad','fruit','snack','crackers','dip'],
+  'lunch':            ['bread','spread','salad','soup','crackers','hummus'],
+  'sandwich':         ['bread','spread','hummus','pickle','mustard'],
+  // Dinners
+  'pasta':            ['pasta','tomato','sauce','lentil','basil','olive oil','nutritional yeast'],
+  'thai curry':       ['coconut','curry paste','noodles','rice','tamari','lime','ginger'],
+  'curry':            ['lentil','chickpea','rice','coconut','spice','tomato','onion'],
+  'stir fry':         ['noodles','tamari','sesame','ginger','rice','tofu'],
+  'soup':             ['lentil','stock','tomato','coconut','carrot','spice'],
+  'stew':             ['lentil','chickpea','tomato','stock','carrot','potato'],
+  'salad':            ['quinoa','chickpea','olive oil','vinegar','seed','nut','tahini'],
+  'bowl':             ['rice','quinoa','chickpea','tahini','seed','avocado','tamari'],
+  'pizza':            ['flour','tomato','yeast','olive oil','nutritional yeast','basil'],
+  'burger':           ['bread','bean','lentil','spice','tomato','mustard'],
+  // Breakfast
+  'breakfast':        ['oat','granola','nut butter','fruit','seed','milk','coffee','tea'],
+  'porridge':         ['oat','milk','seed','fruit','maple','cinnamon'],
+  'smoothie':         ['oat','seed','nut butter','fruit','milk','protein'],
+  'overnight oats':   ['oat','milk','chia','seed','maple','fruit'],
+  // Snacks
+  'snack':            ['nut','seed','cracker','fruit','chocolate','bar','hummus'],
+  'snacks':           ['nut','seed','cracker','fruit','chocolate','bar'],
+  // Baking
+  'baking':           ['flour','sugar','oil','vanilla','baking powder','chocolate','oat'],
+  'cake':             ['flour','sugar','oil','vanilla','baking powder','chocolate'],
+  'bread':            ['flour','yeast','oil','salt','seed'],
+  'cookies':          ['flour','sugar','oil','chocolate','vanilla','oat'],
+  // Drinks
+  'drinks':           ['tea','coffee','oat milk','juice','kombucha'],
+  'smoothie bowl':    ['oat','seed','nut butter','milk','fruit'],
+};
+
+function getMealKeywords(mealQuery) {
+  const q = mealQuery.toLowerCase();
+  for (const [meal, keywords] of Object.entries(MEAL_KEYWORD_MAP)) {
+    if (q.includes(meal)) return keywords;
+  }
+  // Fallback: use words from the query itself as search terms
+  const stopWords = new Set(['help','me','build','basket','make','cook','for','with','a','the','and','or','some','good','quick','easy','healthy','vegan','organic']);
+  return q.split(/\s+/).filter(w => w.length > 3 && !stopWords.has(w)).slice(0, 5);
+}
+
+async function lookupBasketProducts(supabaseUrl, supabaseKey, mealQuery) {
+  const keywords = getMealKeywords(mealQuery);
+  const fields   = 'product_name,brand,category,description,vegan,organic,gluten_free';
+  const headers  = {
+    'apikey':        supabaseKey,
+    'Authorization': `Bearer ${supabaseKey}`,
+    'Range-Unit':    'items',
+    'Range':         '0-4',
+  };
+
+  const results    = [];
+  const seen       = new Set();
+
+  for (const keyword of keywords.slice(0, 6)) {
+    const url = `${supabaseUrl}/rest/v1/sol_products?approved=eq.true` +
+      `&product_name=ilike.*${encodeURIComponent(keyword)}*` +
+      `&limit=3&select=${fields}`;
+    try {
+      const res  = await fetch(url, { headers });
+      if (!res.ok) continue;
+      const rows = await res.json();
+      for (const row of (rows || [])) {
+        if (!seen.has(row.product_name)) {
+          seen.add(row.product_name);
+          results.push(row);
+        }
+      }
+    } catch(e) { continue; }
+  }
+  return results;
+}
+
+function isRefill(product) {
+  return product.category && product.category.toLowerCase().includes('refill');
+}
+
+function formatBasketContext(products, mealQuery) {
+  if (!products || products.length === 0) return '';
+  const lines = [
+    `REAL KINDLY PRODUCTS for "${mealQuery}" — recommend ONLY these specific products, using exact names:`,
+  ];
+  for (const p of products) {
+    let line = `• ${p.product_name}`;
+    if (p.brand)       line += ` by ${p.brand}`;
+    if (isRefill(p))   line += ` [REFILL — plastic-free]`;
+    if (p.description) line += ` — ${p.description.substring(0, 60)}`;
+    lines.push(line);
+  }
+  lines.push('');
+  lines.push('RULES: Only name the specific products listed above. For refill items mark them as plastic-free. For non-refill items say nothing about packaging. Never say "everything is zero-waste" — only refill products are plastic-free.');
+  return lines.join('\n');
 }
 
 function formatDietaryResults(products, diet, category) {
