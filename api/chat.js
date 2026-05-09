@@ -164,6 +164,12 @@ export default async function handler(req, res) {
     // ── Build system prompt injection ──────────────────────────────────────
     const requestBody    = { ...req.body };
     const existingSystem = requestBody.system || '';
+    const waNumber       = process.env.KINDLY_WHATSAPP_NUMBER || '';
+    if (waNumber) {
+      // Inject the real WhatsApp number so Sol can use it
+      requestBody.system = (existingSystem || '') + 
+        `\n\nKINDLY WHATSAPP: The team can be reached directly at https://wa.me/${waNumber.replace(/[^0-9]/g,'')} for questions Sol can't answer.`;
+    }
 
     let contextBlock = '';
     if (isBasketBuilder && foundInDb && productContext) {
@@ -192,8 +198,7 @@ export default async function handler(req, res) {
     } else if (foundStoreInfo && storeContext) {
       contextBlock = '\n\n' + storeContext +
         '\n\nIMPORTANT: Answer using the verified Kindly store information above. ' +
-        'End your response with a new line containing exactly: ' +
-        '"📋 *From Kindly\'s store information*"';
+        'Give a natural, conversational answer. Do NOT append any database indicator or emoji tag at the end.';
     } else if (foundInDb && productContext) {
       contextBlock = '\n\n' + productContext +
         '\n\nIMPORTANT: Answer ONLY from the verified product data above. ' +
@@ -208,11 +213,15 @@ export default async function handler(req, res) {
           'Respond warmly asking what they would like to know more about — e.g. a specific product, opening hours, our story, or our environmental impact. ' +
           'Keep it brief and friendly. Do NOT append any database indicator emoji.';
       } else {
+        const waNumber = process.env.KINDLY_WHATSAPP_NUMBER || '';
+        const waLine   = waNumber
+          ? `\\n\\nIf you could not fully answer the question, add this on a new line: "💬 *Still need help? WhatsApp the Kindly team at https://wa.me/${waNumber.replace(/[^0-9]/g,'')}*"`
+          : '';
         contextBlock = '\n\nIMPORTANT: No specific data was found in the Kindly database for this question. ' +
           'Answer only if this relates to Kindly, our products, sustainable shopping, or the Brighton community. ' +
           'Answer from your general knowledge but be appropriately cautious about specifics. ' +
           'End your response with a new line containing exactly: ' +
-          '"💡 *General knowledge — product details may vary*"';
+          '"💡 *General knowledge — product details may vary*"' + waLine;
       }
     }
 
