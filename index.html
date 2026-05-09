@@ -336,8 +336,26 @@ function addMessage(role, content, imgSrc) {
     bubble.appendChild(img);
   }
   if (content) {
+    // Convert URLs to clickable links and render text safely
     const span = document.createElement('span');
-    span.textContent = content;
+    // Split content by URLs and render each part
+    const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g;
+    const parts = content.split(urlRegex);
+    parts.forEach(part => {
+      if (urlRegex.test(part)) {
+        const a = document.createElement('a');
+        a.href = part;
+        a.textContent = part;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.style.cssText = 'color:inherit;text-decoration:underline;word-break:break-all;';
+        span.appendChild(a);
+      } else if (part) {
+        span.appendChild(document.createTextNode(part));
+      }
+      // Reset lastIndex after test()
+      urlRegex.lastIndex = 0;
+    });
     bubble.appendChild(span);
   }
   div.appendChild(avatar);
