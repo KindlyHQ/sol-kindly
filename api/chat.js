@@ -177,16 +177,17 @@ export default async function handler(req, res) {
         '\n\nIMPORTANT: Build a basket suggestion using ONLY the specific Kindly products listed above. ' +
         'Name each product exactly as listed. For refill products note they are plastic-free. ' +
         'For non-refill items say nothing about packaging — do NOT say "everything is zero-waste". ' +
-        'Keep it to 5-6 items max. End with "Ask the team if you need help finding anything!" ' +
-        '\nEnd with: "📋 *From Kindly\'s product database*"';
+        'Keep it to 5-6 items max. ' +
+        'Do NOT say "Ask the team" — the customer may be shopping online. ' +
+        'Do not add a closing line — the response stands on its own. Do NOT append any database indicator tag.';
     } else if (dietaryFilter.diet && foundInDb && productContext) {
       contextBlock = '\n\n' + productContext +
         `\n\nIMPORTANT: The customer is looking for ${dietaryFilter.diet} products` +
         (dietaryFilter.category ? ` in the ${dietaryFilter.category} category` : '') +
         '. List the products clearly with their key benefits. ' +
         'Be specific and helpful — this is exactly what they need to know to shop confidently. ' +
-        'End with a note that they can ask Sol about any specific product for more detail. ' +
-        '\nEnd your response with: "📋 *From Kindly\'s product database*"';
+        'Do NOT say "Ask the team" — the customer may be shopping online. ' +
+        'Do not add a closing line — the response stands on its own. Do NOT append any database indicator tag.';
     } else if (isSurpriseMe && foundInDb && productContext) {
       contextBlock = '\n\n' + productContext +
         '\n\nIMPORTANT: The customer wants to be surprised with a product story. ' +
