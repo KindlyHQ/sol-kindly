@@ -20,7 +20,7 @@
   .header-text h1 { font-size:18px;font-weight:600; }
   .header-text p { font-size:12px;opacity:0.85;margin-top:1px; }
   .status-dot { width:8px;height:8px;background:#4ade80;border-radius:50%;margin-left:auto;box-shadow:0 0 0 2px rgba(255,255,255,0.3); }
-  .chat-area { flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:400px; }
+  .chat-area { flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;min-height:200px; }
   .message { display:flex;gap:8px;align-items:flex-start;animation:fadeIn 0.2s ease; }
   @keyframes fadeIn { from{opacity:0;transform:translateY(4px)}to{opacity:1} }
   .message.user { flex-direction:row-reverse; }
@@ -36,12 +36,15 @@
   .typing-dot:nth-child(3){animation-delay:0.4s}
   @keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:0.4}30%{transform:translateY(-6px);opacity:1}}
 
-  /* ── Action buttons (Scan / Loyalty / Opening Hours) ── */
+  /* ── Action buttons ── */
   .action-btns {
     padding: 10px 16px 4px;
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 8px;
+  }
+  .action-btns.no-scan {
+    grid-template-columns: 1fr 1fr;
   }
   .action-btn {
     display: flex;
@@ -64,7 +67,7 @@
   .action-btn:active { transform: scale(0.96); background: #fff0f5; }
   .action-btn .btn-icon { font-size: 20px; }
 
-  /* ── Quick chips (scrollable secondary row) ── */
+  /* ── Quick chips ── */
   .quick-actions { padding:6px 16px 8px;display:flex;gap:8px;overflow-x:auto;scrollbar-width:none; }
   .quick-actions::-webkit-scrollbar{display:none}
   .quick-btn { white-space:nowrap;padding:6px 12px;border-radius:16px;border:1px solid #ffb3c8;background:white;color:#ff0054;font-size:12px;cursor:pointer;flex-shrink:0; }
@@ -87,6 +90,14 @@
   .impact-stat .lbl{font-size:10px;color:#888;margin-top:1px}
   .filter-opt{padding:12px 10px;border:1.5px solid #ffb3c8;background:white;color:#ff0054;border-radius:12px;font-size:13px;font-weight:600;cursor:pointer;text-align:center;}
   .filter-opt:active{background:#fff0f5;transform:scale(0.97);}
+
+  /* ── Embed mode — tighter layout ── */
+  body.embed-mode .header { padding:12px 16px; }
+  body.embed-mode .header-text h1 { font-size:16px; }
+  body.embed-mode .chat-area { min-height:120px; padding:12px; }
+  body.embed-mode .action-btns { padding:8px 12px 4px; }
+  body.embed-mode .quick-actions { padding:4px 12px 6px; }
+  body.embed-mode .input-area { padding:10px 12px 14px; }
 </style>
 </head>
 <body>
@@ -100,7 +111,8 @@
   <div class="status-dot"></div>
 </div>
 
-<div class="impact-banner">
+<!-- Impact banner — hidden in embed mode -->
+<div class="impact-banner" id="impact-banner">
   <div class="impact-stat"><div class="num" id="plastic-counter">370K+</div><div class="lbl">plastics diverted</div></div>
   <div class="impact-stat"><div class="num">66t</div><div class="lbl">CO₂ saved</div></div>
   <div class="impact-stat"><div class="num">66p</div><div class="lbl">stays in Brighton</div></div>
@@ -110,13 +122,13 @@
 <div class="chat-area" id="chat">
   <div class="message">
     <div class="avatar sol">S</div>
-    <div class="bubble sol">Hi! I'm Sol — Kindly's product guide. Photograph any product or ask me anything about what's in the shop. What can I help you with? 🌱</div>
+    <div class="bubble sol" id="welcome-msg">Hi! I'm Sol — Kindly's product guide. Photograph any product or ask me anything about what's in the shop. What can I help you with? 🌱</div>
   </div>
 </div>
 
-<!-- ── Primary action buttons ── -->
-<div class="action-btns">
-  <button class="action-btn" onclick="triggerScan()">
+<!-- Primary action buttons -->
+<div class="action-btns" id="action-btns">
+  <button class="action-btn" id="scan-btn" onclick="triggerScan()">
     <span class="btn-icon">📷</span>
     Scan
   </button>
@@ -130,7 +142,7 @@
   </button>
 </div>
 
-<!-- ── Secondary quick chips ── -->
+<!-- Secondary quick chips -->
 <div class="quick-actions">
   <button class="quick-btn" onclick="sendQuick('Tell me about Kindly\'s environmental impact')">Impact 🌍</button>
   <button class="quick-btn" onclick="sendQuick('Surprise me with a product story!')">Surprise me! ✨</button>
@@ -138,7 +150,7 @@
   <button class="quick-btn" onclick="showBasketPrompt()">Build Basket 🛒</button>
 </div>
 
-<!-- ── Dietary filter modal ── -->
+<!-- Dietary filter modal -->
 <div id="dietary-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:flex-end;justify-content:center;">
   <div style="background:white;border-radius:20px 20px 0 0;padding:24px 20px 36px;width:100%;max-width:480px;">
     <div style="font-weight:700;font-size:16px;color:#1a0a0f;margin-bottom:6px;">Dietary filter 🥗</div>
@@ -152,13 +164,13 @@
       <button class="filter-opt" onclick="applyDietaryFilter('soy free')">🫘 Soy free</button>
     </div>
     <div style="font-size:13px;color:#888;margin-bottom:8px;">Any category in mind? (optional)</div>
-    <input id="diet-category" type="text" placeholder="e.g. pasta, snacks, bread, chocolate..." 
+    <input id="diet-category" type="text" placeholder="e.g. pasta, snacks, bread, chocolate..."
       style="width:100%;padding:10px 14px;border:1px solid #ffb3c8;border-radius:12px;font-size:14px;outline:none;margin-bottom:16px;font-family:inherit;">
     <button onclick="closeDietaryModal()" style="width:100%;padding:12px;border:1px solid #ffb3c8;background:white;color:#ff0054;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;">Cancel</button>
   </div>
 </div>
 
-<!-- ── Recipe modal ── -->
+<!-- Recipe modal -->
 <div id="recipe-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:flex-end;justify-content:center;">
   <div style="background:white;border-radius:20px 20px 0 0;padding:24px 20px 36px;width:100%;max-width:480px;">
     <div style="font-weight:700;font-size:16px;color:#1a0a0f;margin-bottom:6px;">Recipe idea 🍳</div>
@@ -173,7 +185,7 @@
   </div>
 </div>
 
-<!-- ── Basket builder modal ── -->
+<!-- Basket builder modal -->
 <div id="basket-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:flex-end;justify-content:center;">
   <div style="background:white;border-radius:20px 20px 0 0;padding:24px 20px 36px;width:100%;max-width:480px;">
     <div style="font-weight:700;font-size:16px;color:#1a0a0f;margin-bottom:6px;">Build a basket 🛒</div>
@@ -205,10 +217,40 @@
 </div>
 
 <script>
+// ── Detect embed / no-camera mode from URL params ─────────────────────────
+const _urlParams = new URLSearchParams(window.location.search);
+const _isEmbed   = _urlParams.get('embed')    === 'true';
+const _noCamera  = _urlParams.get('nocamera') === 'true';
+
+if (_isEmbed) {
+  // Add embed class for tighter CSS
+  document.body.classList.add('embed-mode');
+
+  // Hide impact banner — saves significant vertical space
+  document.getElementById('impact-banner').style.display = 'none';
+
+  // Update welcome message to be website-appropriate
+  document.getElementById('welcome-msg').textContent =
+    'Hi! I\'m Sol — Kindly\'s product guide. Ask me anything about our range, ingredients, allergens, or opening hours. 🌱';
+}
+
+if (_isEmbed || _noCamera) {
+  // Hide scan button and camera attach button — not useful on website
+  const scanBtn   = document.getElementById('scan-btn');
+  const cameraBtn = document.getElementById('camera-btn');
+  if (scanBtn)   scanBtn.style.display   = 'none';
+  if (cameraBtn) cameraBtn.style.display = 'none';
+
+  // Adjust action buttons grid to 2 columns since scan is hidden
+  const actionBtns = document.getElementById('action-btns');
+  if (actionBtns) actionBtns.classList.add('no-scan');
+}
+
+// ── System prompt ─────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are Sol — the in-store AI guide for Kindly, Brighton's sustainable supermarket.
 
 RESPONSE LENGTH — CRITICAL RULE:
-Keep answers SHORT. 2-4 sentences maximum. Customers are standing in a shop. No bullet-point lists unless specifically asked. Lead with the most useful fact, then stop.
+Keep answers SHORT. 2-4 sentences maximum. Customers are standing in a shop or browsing online. No bullet-point lists unless specifically asked. Lead with the most useful fact, then stop.
 
 Personality: warm, Brighton, genuinely knowledgeable, zero pretension. Never preachy. Never start with "Great question!" or "Absolutely!".
 
@@ -217,6 +259,7 @@ About Kindly:
 - 100% plant-based, 100% single-use plastic-free, organic loose produce
 - 370,000+ plastics diverted, 66t CO₂ saved, 5.8M litres water saved
 - 66p of every £1 stays in the Brighton economy, 75% repeat customers
+- Website: kindlyofbrighton.com | Instagram/TikTok: @kindlybrighton
 
 OPENING HOURS — answer exactly like this when asked:
 York Place
@@ -229,7 +272,7 @@ Mon–Sat  9:00am – 6:00pm
 Sunday  10:00am – 4:00pm
 
 LOYALTY SCHEME:
-Kindly uses LoyalZoo. Every £1 spent earns points redeemable for discounts. Sign up at the till — takes 30 seconds. When relevant, mention it warmly as a genuine tip: "By the way, the Kindly loyalty scheme is worth signing up for — every £1 adds up and the team can sort it at the till in 30 seconds."
+Kindly uses LoyalZoo. Every £1 spent earns points redeemable for discounts. Sign up at https://start.mylty.co?id=21913 — takes 30 seconds. Mention warmly when relevant.
 
 ALLERGEN RULES — NON-NEGOTIABLE:
 Never say "yes it's safe" outright. Always add: "For severe allergies, check the physical label and speak to staff — they'll know."
@@ -237,9 +280,9 @@ Never say "yes it's safe" outright. Always add: "For severe allergies, check the
 When you don't know: "I don't have that detail yet — worth asking at the till."`;
 
 let imageBase64 = null;
-let imageType = null;
-let messages = [];
-let isLoading = false;
+let imageType   = null;
+let messages    = [];
+let isLoading   = false;
 
 function autoResize(el) {
   el.style.height = 'auto';
@@ -252,7 +295,6 @@ function normaliseMimeType(type) {
   return map[type] || type;
 }
 
-// Scan button — triggers the file input (camera on mobile)
 function triggerScan() {
   document.getElementById('file-input').click();
 }
@@ -266,7 +308,6 @@ function handleImage(input) {
     imageBase64 = e.target.result.split(',')[1];
     document.getElementById('preview-img').src = e.target.result;
     document.getElementById('img-preview').style.display = 'block';
-    // Auto-focus the text input so user can add a question if they want
     document.getElementById('msg-input').focus();
   };
   reader.readAsDataURL(file);
@@ -281,7 +322,7 @@ function removeImage() {
 
 function addMessage(role, content, imgSrc) {
   const chat = document.getElementById('chat');
-  const div = document.createElement('div');
+  const div  = document.createElement('div');
   div.className = 'message ' + role;
   const avatar = document.createElement('div');
   avatar.className = 'avatar ' + role;
@@ -307,9 +348,9 @@ function addMessage(role, content, imgSrc) {
 
 function showTyping() {
   const chat = document.getElementById('chat');
-  const div = document.createElement('div');
+  const div  = document.createElement('div');
   div.className = 'message'; div.id = 'typing';
-  const av = document.createElement('div');
+  const av  = document.createElement('div');
   av.className = 'avatar sol'; av.textContent = 'S';
   const ind = document.createElement('div');
   ind.className = 'typing-indicator';
@@ -325,8 +366,8 @@ function sendQuick(text) { document.getElementById('msg-input').value = text; se
 
 async function sendMessage() {
   if (isLoading) return;
-  const input = document.getElementById('msg-input');
-  const text = input.value.trim();
+  const input    = document.getElementById('msg-input');
+  const text     = input.value.trim();
   const hasImage = !!imageBase64;
   if (!text && !hasImage) return;
 
@@ -336,7 +377,7 @@ async function sendMessage() {
   addMessage('user', text || '(photographed a product)', hasImage ? `data:${imageType};base64,${imageBase64}` : null);
   input.value = ''; input.style.height = 'auto';
 
-  const storedImg = imageBase64, storedType = imageType;
+  const storedImg  = imageBase64, storedType = imageType;
   removeImage();
 
   const userContent = [];
@@ -348,14 +389,14 @@ async function sendMessage() {
 
   try {
     const response = await fetch('/api/chat', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+      body:    JSON.stringify({
+        model:      'claude-haiku-4-5-20251001',
         max_tokens: 400,
-        system: SYSTEM_PROMPT,
-        messages: messages
-      })
+        system:     SYSTEM_PROMPT,
+        messages:   messages,
+      }),
     });
 
     const data = await response.json();
@@ -363,7 +404,6 @@ async function sendMessage() {
 
     if (data.error) {
       addMessage('sol', 'Something went wrong — please try again.');
-      console.error('API error:', data.error);
     } else {
       const reply = data.content[0].text;
       addMessage('sol', reply);
@@ -381,67 +421,53 @@ async function sendMessage() {
 
 // ── Dietary filter ─────────────────────────────────────────────────────────
 function showDietaryFilter() {
-  const modal = document.getElementById('dietary-modal');
-  modal.style.display = 'flex';
+  document.getElementById('dietary-modal').style.display = 'flex';
   document.getElementById('diet-category').value = '';
 }
-
 function closeDietaryModal() {
   document.getElementById('dietary-modal').style.display = 'none';
 }
-
 function applyDietaryFilter(diet) {
   const category = document.getElementById('diet-category').value.trim();
   closeDietaryModal();
-  let query = '';
-  if (category) {
-    query = `I'm ${diet} — what ${category} options do you have at Kindly?`;
-  } else {
-    query = `I'm ${diet} — what products do you recommend at Kindly?`;
-  }
-  sendQuick(query);
+  sendQuick(category
+    ? `I'm ${diet} — what ${category} options do you have at Kindly?`
+    : `I'm ${diet} — what products do you recommend at Kindly?`
+  );
 }
 
-// ── Recipe idea ────────────────────────────────────────────────────────────
+// ── Recipe ─────────────────────────────────────────────────────────────────
 function showRecipePrompt() {
-  const modal = document.getElementById('recipe-modal');
-  modal.style.display = 'flex';
+  document.getElementById('recipe-modal').style.display = 'flex';
   setTimeout(() => document.getElementById('recipe-input').focus(), 100);
 }
-
 function closeRecipeModal() {
   document.getElementById('recipe-modal').style.display = 'none';
 }
-
 function submitRecipe() {
   const ingredient = document.getElementById('recipe-input').value.trim();
   closeRecipeModal();
-  if (!ingredient) {
-    sendQuick('Give me a recipe idea using something from Kindly');
-    return;
-  }
-  sendQuick(`Give me a simple recipe idea using ${ingredient} — ideally with other products Kindly stocks`);
+  sendQuick(ingredient
+    ? `Give me a simple recipe idea using ${ingredient} — ideally with other products Kindly stocks`
+    : 'Give me a recipe idea using something from Kindly'
+  );
 }
 
 // ── Basket builder ─────────────────────────────────────────────────────────
 function showBasketPrompt() {
-  const modal = document.getElementById('basket-modal');
-  modal.style.display = 'flex';
+  document.getElementById('basket-modal').style.display = 'flex';
   setTimeout(() => document.getElementById('basket-input').focus(), 100);
 }
-
 function closeBasketModal() {
   document.getElementById('basket-modal').style.display = 'none';
 }
-
 function submitBasket() {
   const meal = document.getElementById('basket-input').value.trim();
   closeBasketModal();
-  if (!meal) {
-    sendQuick('Help me build a basket of products from Kindly for a quick healthy meal');
-    return;
-  }
-  sendQuick(`Help me build a basket from Kindly for: ${meal}. What products should I pick up?`);
+  sendQuick(meal
+    ? `Help me build a basket from Kindly for: ${meal}. What products should I pick up?`
+    : 'Help me build a basket of products from Kindly for a quick healthy meal'
+  );
 }
 
 // Close modals on backdrop tap
@@ -451,25 +477,24 @@ function submitBasket() {
   });
 });
 
-// ── Live plastic counter — fetch from Supabase on page load ───────────────
+// ── Live plastic counter ───────────────────────────────────────────────────
 async function loadPlasticCounter() {
   try {
-    const SUPABASE_URL = '/api/store-info'; // routed through our proxy
     const r = await fetch('/api/chat', {
-      method: 'POST',
+      method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ _action: 'get_plastic_counter' })
+      body:    JSON.stringify({ _action: 'get_plastic_counter' }),
     });
     if (!r.ok) return;
     const data = await r.json();
     if (data.plastic_counter) {
-      // Format e.g. 344412 → "344K+"
       const n = parseInt(data.plastic_counter.replace(/[^0-9]/g, ''));
       if (!isNaN(n) && n > 1000) {
         const formatted = n >= 1000000
           ? Math.floor(n / 100000) / 10 + 'M+'
           : Math.floor(n / 1000) + 'K+';
-        document.getElementById('plastic-counter').textContent = formatted;
+        const el = document.getElementById('plastic-counter');
+        if (el) el.textContent = formatted;
       }
     }
   } catch(e) {
@@ -477,7 +502,8 @@ async function loadPlasticCounter() {
   }
 }
 
-loadPlasticCounter();
+// Only load counter if banner is visible (not in embed mode)
+if (!_isEmbed) loadPlasticCounter();
 </script>
 </body>
 </html>
