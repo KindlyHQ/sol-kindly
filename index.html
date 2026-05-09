@@ -336,26 +336,9 @@ function addMessage(role, content, imgSrc) {
     bubble.appendChild(img);
   }
   if (content) {
-    // Convert URLs to clickable links and render text safely
+    // Render markdown: bold, italic, URLs → clickable links
     const span = document.createElement('span');
-    // Split content by URLs and render each part
-    const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g;
-    const parts = content.split(urlRegex);
-    parts.forEach(part => {
-      if (urlRegex.test(part)) {
-        const a = document.createElement('a');
-        a.href = part;
-        a.textContent = part;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.style.cssText = 'color:inherit;text-decoration:underline;word-break:break-all;';
-        span.appendChild(a);
-      } else if (part) {
-        span.appendChild(document.createTextNode(part));
-      }
-      // Reset lastIndex after test()
-      urlRegex.lastIndex = 0;
-    });
+    span.innerHTML = renderMarkdown(content);
     bubble.appendChild(span);
   }
   div.appendChild(avatar);
@@ -494,6 +477,43 @@ function submitBasket() {
     if (e.target === this) this.style.display = 'none';
   });
 });
+
+// ── Markdown renderer ─────────────────────────────────────────────────────
+// Converts Sol's markdown responses to safe HTML
+function renderMarkdown(text) {
+  if (!text) return '';
+
+  // Escape HTML first to prevent XSS
+  let html = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Bold: **text** or __text__
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__(.*?)__/g, '<strong>$1</strong>');
+
+  // Italic: *text* or _text_ (but not ** )
+  html = html.replace(/(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+  html = html.replace(/(?<!_)_(?!_)(.*?)(?<!_)_(?!_)/g, '<em>$1</em>');
+
+  // Inline code: `code`
+  html = html.replace(/`([^`]+)`/g, '<code style="background:#fff0f5;padding:1px 5px;border-radius:4px;font-size:12px;">$1</code>');
+
+  // URLs → clickable links (after escaping, so & is &amp; in URLs — handle both)
+  html = html.replace(/(https?:\/\/[^\s<>"{}|^`[\]]+)/g, function(url) {
+    // Decode &amp; back to & for the href
+    const cleanUrl = url.replace(/&amp;/g, '&');
+    // Display shortened version if very long
+    const display = url.length > 50 ? url.substring(0, 47) + '...' : url;
+    return '<a href="' + cleanUrl + '" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;word-break:break-all;">' + display + '</a>';
+  });
+
+  // Line breaks
+  html = html.replace(/\n/g, '<br>');
+
+  return html;
+}
 
 // ── Live plastic counter ───────────────────────────────────────────────────
 async function loadPlasticCounter() {
