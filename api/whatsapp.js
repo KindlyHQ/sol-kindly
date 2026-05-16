@@ -91,6 +91,30 @@ export default async function handler(req, res) {
   // WhatsApp doesn't render markdown — strip asterisks and backticks
   solReply = cleanForWhatsApp(solReply);
 
+  // ── Log question to Supabase with channel=whatsapp ────────────
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_KEY;
+  if (supabaseUrl && supabaseKey && body) {
+    fetch(`${supabaseUrl}/rest/v1/sol_question_log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'apikey':        supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Prefer':        'return=minimal',
+      },
+      body: JSON.stringify({
+        question:  body,
+        answer:    solReply,
+        had_image: false,
+        from_db:   false,
+        off_topic: false,
+        channel:   'whatsapp',
+        asked_at:  new Date().toISOString(),
+      }),
+    }).catch(() => {});
+  }
+
   // ── If Sol used general knowledge, forward to Slack for team follow-up ──
   const isUncertain = solReply.includes('💡') || solReply.includes('General knowledge');
   if (isUncertain && from) {
@@ -107,29 +131,39 @@ function buildWhatsAppSystemPrompt() {
   return `You are Sol, the friendly product guide for Kindly of Brighton — the UK's first hybrid sustainable supermarket. You're answering via WhatsApp so keep responses concise and conversational.
 
 KINDLY FACTS:
-- Two stores: York Place (Mon–Fri 8am–7pm, Sat 9am–7pm, Sun 10am–5pm) and Dyke Road (Mon–Sat 9am–6pm, Sun 10am–4pm)
+- Two stores in Brighton (not York the city — York Place is a street in Brighton):
+  • York Place store: 20-21 York Place, Brighton BN1 4GU — Mon–Fri 8am–7pm, Sat 9am–7pm, Sun 10am–5pm
+  • Dyke Road store: 110-114 Dyke Road, Brighton BN1 3TE — Mon–Sat 9am–6pm, Sun 10am–4pm
 - 100% plant-based, ~80% organic, plastic-free refill options
 - Website: kindlyofbrighton.com | Instagram/TikTok: @kindlybrighton
 - Loyalty scheme: https://start.mylty.co?id=21913
 
+CRITICAL — STORE NAMES:
+There are only TWO Kindly stores, both in Brighton. "York Place" and "York" both refer to the same single store at 20-21 York Place, Brighton. Never ask "which York Place store" — there is only one. Never confuse York Place (a street in Brighton) with York (a city in Yorkshire).
+
 WHATSAPP RULES:
 - Keep replies SHORT — 3-5 sentences max for WhatsApp
-- No markdown formatting (no **bold**, no bullet points with dashes, use • instead)
+- No markdown formatting (no **bold**, no dashes for bullets, use • instead)
 - Be warm and human — this is a real conversation
 - If you don't know something specific, say so honestly and suggest they call or visit
 - For allergen questions always add: "Please check with the team in store to be 100% sure"
 - Never make up product details you're not certain about
-- End with a friendly sign-off or offer to help further`;
+- Do NOT add any source indicators or tags at the end of messages`;
 }
 
 function cleanForWhatsApp(text) {
   return text
+    // Remove DB/knowledge indicators FIRST — before markdown stripping
+    // Handle both with and without asterisks (in case already stripped)
+    .replace(/📋\s*\*?From Kindly.*?\*?\n?/g, '')
+    .replace(/💡\s*\*?General knowledge.*?\*?\n?/g, '')
+    .replace(/📋\s*\*?From Kindly[^\n]*/g, '')
+    .replace(/💡\s*\*?General[^\n]*/g, '')
+    // Now strip markdown formatting
     .replace(/\*\*(.*?)\*\*/g, '$1')      // remove **bold**
     .replace(/\*(.*?)\*/g, '$1')          // remove *italic*
     .replace(/`(.*?)`/g, '$1')            // remove `code`
     .replace(/^[-•]\s/gm, '• ')          // normalise bullet points
-    .replace(/📋 \*From Kindly.*?\*/g, '') // remove DB indicator
-    .replace(/💡 \*General.*?\*/g, '')    // remove general knowledge indicator
     .replace(/\n{3,}/g, '\n\n')           // max double line breaks
     .trim();
 }
@@ -204,4 +238,4 @@ async function forwardToSlack(from, question, solAnswer) {
   } catch(e) {
     console.error('Slack forward error:', e.message);
   }
-}  
+}
