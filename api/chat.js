@@ -81,6 +81,8 @@ export default async function handler(req, res) {
     const dietaryFilter       = detectDietaryFilter(qLower);
     const isBasketBuilder     = detectBasketBuilder(qLower);
     const isRecipeRequest     = detectRecipeRequest(qLower);
+    const isOrderQuery        = detectOrderQuery(qLower);
+    const orderDetails        = isOrderQuery ? extractOrderDetails(customerQuestion) : {};
     const isRefillGuide       = detectRefillGuide(qLower);
     const isProductPairing    = detectProductPairing(qLower);
     const isPositiveFeedback  = detectGoogleReview(qLower);
@@ -137,6 +139,48 @@ export default async function handler(req, res) {
         }
       }
 
+      // ── Order status lookup ─────────────────────────────────────────────
+      if (isOrderQuery) {
+        if (orderDetails.orderNumber && orderDetails.email) {
+          // Both provided — look up the order
+          try {
+            const orderRes = await fetch('https://ask-sol.vercel.app/api/order', {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({
+                order_number: orderDetails.orderNumber,
+                email:        orderDetails.email,
+              }),
+            });
+            if (orderRes.ok) {
+              const orderData = await orderRes.json();
+              if (orderData.found) {
+                const d = orderData;
+                productContext =
+                  `ORDER STATUS:\n` +
+                  `Order: #${d.order_number}\n` +
+                  `Customer: ${d.customer_name}\n` +
+                  `Status: ${d.status.emoji} ${d.status.label}\n` +
+                  `Detail: ${d.status.detail}\n` +
+                  (d.delivery_date ? `Scheduled delivery: ${d.delivery_date}\n` : '') +
+                  `Total: £${d.total_amount}\n` +
+                  `Items: ${d.items_summary}`;
+                foundInDb = true;
+              } else {
+                productContext = 'ORDER_NOT_FOUND';
+                foundInDb = true;
+              }
+            }
+          } catch(e) {
+            console.error('Order lookup error:', e.message);
+          }
+        } else {
+          // Missing order number or email — ask for them
+          productContext = 'ORDER_MISSING_DETAILS';
+          foundInDb = true;
+        }
+      }
+
       // Refill guide — explain how refilling works at Kindly
       if (!foundStoreInfo && isRefillGuide) {
         const refillContent = await fetchStoreInfo(supabaseUrl, supabaseKey);
@@ -186,7 +230,28 @@ export default async function handler(req, res) {
     }
 
     let contextBlock = '';
-    if (isRefillGuide && foundInDb && productContext) {
+    if (isOrderQuery && foundInDb && productContext) {
+      if (productContext.startsWith('ORDER STATUS:')) {
+        contextBlock = '\n\n' + productContext +
+          '\n\nIMPORTANT: Give the customer a warm, clear update on their Kindly order. ' +
+          'Lead with the status emoji and label. Mention the delivery date if available. ' +
+          'List 2-3 items from their order if the list is long. ' +
+          'Keep it friendly and reassuring — this is a Brighton local business. ' +
+          'Do NOT append any database indicator tag.';
+      } else if (productContext === 'ORDER_NOT_FOUND') {
+        contextBlock = '\n\nTell the customer warmly that you could not find an order matching ' +
+          'those details. Ask them to double-check: (1) their order number — it appears as #XXXX ' +
+          'in their confirmation email, and (2) the email they used when ordering. ' +
+          'Suggest contacting hello@kindlyofbrighton.com if they still need help. Be warm, not robotic.';
+      } else {
+        // Missing details
+        contextBlock = '\n\nThe customer is asking about their order but hasn\'t provided ' +
+          'their order number and email. Ask them warmly for: ' +
+          '(1) their order number (e.g. #2421 — found in their confirmation email), and ' +
+          '(2) the email address they used when placing the order. ' +
+          'Explain you need both to look up their order securely.';
+      }
+    } else if (isRefillGuide && foundInDb && productContext) {
       contextBlock = '\n\n' + productContext +
         '\n\nIMPORTANT: The customer wants to know how refilling works at Kindly. ' +
         'Explain it clearly and warmly — step by step, no jargon. ' +
@@ -422,6 +487,19 @@ function detectStoreInfoQuestion(q) {
 
 function detectHiringQuestion(q) {
   return /\b(hiring|hire|job|jobs|vacancy|vacancies|work here|recruit|employ|career|position|role|apply|application|join the team|join kindly)\b/.test(q);
+}
+
+function detectOrderQuery(q) {
+  return /\b(order|my order|where.*order|order.*status|track.*order|when.*deliver|delivery.*when|has.*shipped|shipped|dispatch|parcel|tracking|order number|check.*order)\b/.test(q);
+}
+
+function extractOrderDetails(text) {
+  const orderMatch = text.match(/#?(\d{3,6})/);
+  const emailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/i);
+  return {
+    orderNumber: orderMatch ? orderMatch[1] : null,
+    email:       emailMatch ? emailMatch[0].toLowerCase() : null,
+  };
 }
 
 function detectRefillGuide(q) {
