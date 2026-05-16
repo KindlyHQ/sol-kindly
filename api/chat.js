@@ -81,6 +81,9 @@ export default async function handler(req, res) {
     const dietaryFilter       = detectDietaryFilter(qLower);
     const isBasketBuilder     = detectBasketBuilder(qLower);
     const isRecipeRequest     = detectRecipeRequest(qLower);
+    const isRefillGuide       = detectRefillGuide(qLower);
+    const isProductPairing    = detectProductPairing(qLower);
+    const isPositiveFeedback  = detectGoogleReview(qLower);
 
     // ── Supabase lookups ───────────────────────────────────────────────────
     let productContext  = '';
@@ -134,6 +137,17 @@ export default async function handler(req, res) {
         }
       }
 
+      // Refill guide — explain how refilling works at Kindly
+      if (!foundStoreInfo && isRefillGuide) {
+        const refillContent = await fetchStoreInfo(supabaseUrl, supabaseKey);
+        const refillInfo = refillContent && refillContent.refill_guide
+          ? refillContent.refill_guide
+          : 'Bring any clean container, we weigh it empty (tare weight), fill it with whatever you need, then weigh again — you only pay for what you take. Simple, zero waste, and cheaper than pre-packaged. Ask any team member for help your first time!';
+        productContext = 'REFILL GUIDE:
+' + refillInfo;
+        foundInDb = true;
+      }
+
       // Basket builder — pre-fetch real products from DB for meal query
       if (!foundStoreInfo && !isSurpriseMe && !dietaryFilter.diet && isBasketBuilder) {
         try {
@@ -172,7 +186,20 @@ export default async function handler(req, res) {
     }
 
     let contextBlock = '';
-    if (isBasketBuilder && foundInDb && productContext) {
+    if (isRefillGuide && foundInDb && productContext) {
+      contextBlock = '\n\n' + productContext +
+        '\n\nIMPORTANT: The customer wants to know how refilling works at Kindly. ' +
+        'Explain it clearly and warmly — step by step, no jargon. ' +
+        'Make it feel easy and approachable, especially for first-timers. ' +
+        'End by encouraging them to ask staff if they need help. ' +
+        'Do NOT append any database indicator tag.';
+    } else if (isProductPairing && foundInDb && productContext) {
+      contextBlock = '\n\n' + productContext +
+        '\n\nIMPORTANT: The customer is asking what goes well with a product. ' +
+        'Suggest 2-3 specific complementary products from the Kindly range if possible. ' +
+        'Be specific with product names and brands. Keep it conversational and friendly. ' +
+        'Do NOT append any database indicator tag.';
+    } else if (isBasketBuilder && foundInDb && productContext) {
       contextBlock = '\n\n' + productContext +
         '\n\nIMPORTANT: Build a basket suggestion using ONLY the specific Kindly products listed above. ' +
         'Name each product exactly as listed. For refill products note they are plastic-free. ' +
@@ -244,6 +271,17 @@ export default async function handler(req, res) {
 
     const solAnswer = data.content?.[0]?.text || '';
 
+    // ── Google review nudge — append to positive feedback responses ─────────
+    // If customer thanks Sol or gives positive feedback, add a gentle review request
+    if (isPositiveFeedback && solAnswer && !hadImage) {
+      const waNumber = process.env.KINDLY_WHATSAPP_NUMBER || '';
+      const reviewUrl = 'https://g.page/r/kindly-brighton/review';
+      // Only nudge 1 in 3 times to avoid being annoying
+      if (Math.random() < 0.33) {
+        solAnswer = solAnswer + '\n\n😊 *So glad I could help! If you\'re enjoying Kindly, a quick Google review means the world to a small independent shop: ' + reviewUrl + '*';
+      }
+    }
+
     // ── Extract product name from Sol's answer (for image queries) ──────────
     let identifiedProduct = '';
     if (hadImage && solAnswer) {
@@ -263,6 +301,7 @@ export default async function handler(req, res) {
         had_image:          hadImage,
         from_db:            foundInDb,
         identified_product: identifiedProduct,
+        channel:            'website',
       }).catch(err => console.error('Log error:', err));
     }
 
@@ -383,6 +422,19 @@ function detectStoreInfoQuestion(q) {
 
 function detectHiringQuestion(q) {
   return /\b(hiring|hire|job|jobs|vacancy|vacancies|work here|recruit|employ|career|position|role|apply|application|join the team|join kindly)\b/.test(q);
+}
+
+function detectRefillGuide(q) {
+  return /\b(how.*refill|refill.*work|how does refill|bring.*container|own container|how.*bulk|bulk.*work|first time|never refill|new.*refill|refill.*first|how.*shop|weigh|tare|how do i use|get started|how.*kindly work)\b/.test(q);
+}
+
+function detectProductPairing(q) {
+  return /\b(goes well|pair with|what.*with|serve with|works with|complement|what.*use.*with|cook.*with|match.*with|good with|combine with|recipe.*with|make.*with|buy.*with|what else|suggestions|recommend.*with)\b/.test(q);
+}
+
+function detectGoogleReview(q) {
+  // Detects when a conversation has gone well and a review nudge is appropriate
+  return /\b(thank|thanks|helpful|great|love|amazing|brilliant|perfect|excellent|fantastic|wonderful)\b/.test(q);
 }
 
 function detectAboutKindlyQuestion(q) {
@@ -794,7 +846,7 @@ function formatProductContext(products) {
 
 
 // ── Log question to Supabase ──────────────────────────────────────────────
-async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image, from_db, off_topic, identified_product }) {
+async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_image, from_db, off_topic, identified_product, channel }) {
   await fetch(`${supabaseUrl}/rest/v1/sol_question_log`, {
     method: 'POST',
     headers: {
@@ -810,6 +862,7 @@ async function logQuestion({ supabaseUrl, supabaseKey, question, answer, had_ima
       from_db:            from_db  || false,
       off_topic:          off_topic || false,
       identified_product: identified_product || '',
+      channel:            channel || 'website',
       asked_at:           new Date().toISOString(),
     }),
   });
