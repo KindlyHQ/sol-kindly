@@ -137,8 +137,8 @@ function buildWhatsAppSystemPrompt() {
 
 KINDLY FACTS:
 - Two stores in Brighton (not York the city — York Place is a street in Brighton):
-  • York Place store: 20-21 York Place, Brighton BN1 4GU — Mon–Fri 8am–7pm, Sat 9am–7pm, Sun 10am–5pm
-  • Dyke Road store: 110-114 Dyke Road, Brighton BN1 3TE — Mon–Sat 9am–6pm, Sun 10am–4pm
+  • York Place store: 20-21 York Place, Brighton BN1 4GU — Mon–Sat 8am–8pm, Sun 10am–7pm
+  • Dyke Road store: 110-114 Dyke Road, Brighton BN1 3TE — Mon–Thu 9am–8pm, Fri–Sat 9am–7pm, Sun 10am–7pm
 - 100% plant-based, ~80% organic, plastic-free refill options
 - Website: kindlyofbrighton.com | Instagram/TikTok: @kindlybrighton
 - Loyalty scheme: https://start.mylty.co?id=21913
@@ -147,8 +147,8 @@ CRITICAL — STORE NAMES:
 There are only TWO Kindly stores, both in Brighton. "York Place" and "York" both refer to the same single store at 20-21 York Place, Brighton. Never ask "which York Place store" — there is only one. Never confuse York Place (a street in Brighton) with York (a city in Yorkshire).
 
 OPENING HOURS — always answer exactly like this when asked:
-York Place: Mon–Fri 8am–7pm, Sat 9am–7pm, Sun 10am–5pm
-Dyke Road: Mon–Sat 9am–6pm, Sun 10am–4pm
+York Place: Mon–Sat 8am–8pm, Sun 10am–7pm
+Dyke Road: Mon–Thu 9am–8pm, Fri–Sat 9am–7pm, Sun 10am–7pm
 
 WHATSAPP RULES:
 - Keep replies SHORT — 3-5 sentences max for WhatsApp
