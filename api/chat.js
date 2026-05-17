@@ -145,16 +145,16 @@ export default async function handler(req, res) {
         if (orderDetails.orderNumber && (orderDetails.email || customerPhone)) {
           // Look up order — use phone (WhatsApp) or email (website)
           try {
-            const orderRes = await fetch('https://ask-sol.vercel.app/api/order', {
-              method:  'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body:    JSON.stringify({
-                order_number: orderDetails.orderNumber,
-                email:        orderDetails.email || '',
-                phone:        customerPhone || '',
-              }),
+            const scriptUrl = process.env.SHOPIFY_ORDERS_SCRIPT_URL;
+            const orderParams = new URLSearchParams({
+              order: orderDetails.orderNumber,
             });
-            if (orderRes.ok) {
+            if (orderDetails.email) orderParams.set('email', orderDetails.email);
+            if (customerPhone)      orderParams.set('phone', customerPhone.replace(/[^0-9+]/g,''));
+            const orderRes = scriptUrl
+              ? await fetch(`${scriptUrl}?${orderParams.toString()}`, { method: 'GET' })
+              : null;
+            if (orderRes && orderRes.ok) {
               const orderData = await orderRes.json();
               if (orderData.found) {
                 const d = orderData;
