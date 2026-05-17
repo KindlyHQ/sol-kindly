@@ -89,7 +89,7 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error('Sol API error:', err.message);
-    solReply = "Sorry, I'm having a little trouble right now! 🌱 Pop into the shop or call us and the team will help. York Place: Mon–Fri 8am–7pm, Sat 9am–7pm, Sun 10am–5pm.";
+    solReply = "Sorry, I'm having a little trouble right now! 🌱 Please try again in a moment, or email us at hello@kindlyofbrighton.com and we'll get back to you.";
   }
 
   // ── Clean up Sol's response for WhatsApp ─────────────────────
