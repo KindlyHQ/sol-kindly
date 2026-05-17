@@ -36,6 +36,7 @@ export default async function handler(req, res) {
 
   try {
     const messages = req.body.messages || [];
+  const customerPhone = req.body._customer_phone || '';
     const lastMessage = messages[messages.length - 1];
     let customerQuestion = '';
     let hadImage = false;
@@ -141,30 +142,36 @@ export default async function handler(req, res) {
 
       // ── Order status lookup ─────────────────────────────────────────────
       if (isOrderQuery) {
-        if (orderDetails.orderNumber && orderDetails.email) {
-          // Both provided — look up the order
+        if (orderDetails.orderNumber && (orderDetails.email || customerPhone)) {
+          // Look up order — use phone (WhatsApp) or email (website)
           try {
             const orderRes = await fetch('https://ask-sol.vercel.app/api/order', {
               method:  'POST',
               headers: { 'Content-Type': 'application/json' },
               body:    JSON.stringify({
                 order_number: orderDetails.orderNumber,
-                email:        orderDetails.email,
+                email:        orderDetails.email || '',
+                phone:        customerPhone || '',
               }),
             });
             if (orderRes.ok) {
               const orderData = await orderRes.json();
               if (orderData.found) {
                 const d = orderData;
+                // For cancelled orders, include the delivery address for context
+                const isCancelled = d.raw_status === 'Cancelled' || d.raw_status === 'cancelled';
                 productContext =
                   `ORDER STATUS:\n` +
                   `Order: #${d.order_number}\n` +
                   `Customer: ${d.customer_name}\n` +
                   `Status: ${d.status.emoji} ${d.status.label}\n` +
-                  `Detail: ${d.status.detail}\n` +
+                  `Raw status: ${d.raw_status}\n` +
                   (d.delivery_date ? `Scheduled delivery: ${d.delivery_date}\n` : '') +
                   `Total: £${d.total_amount}\n` +
-                  `Items: ${d.items_summary}`;
+                  `Items: ${d.items_summary}\n` +
+                  (isCancelled && d.shipping_address ? `Delivery address on order: ${d.shipping_address}\n` : '') +
+                  (d.masked_phone ? `masked_phone:${d.masked_phone}\n` : '') +
+                  (d.masked_email ? `masked_email:${d.masked_email}\n` : '');
                 foundInDb = true;
               } else {
                 productContext = 'ORDER_NOT_FOUND';
@@ -232,24 +239,77 @@ export default async function handler(req, res) {
     let contextBlock = '';
     if (isOrderQuery && foundInDb && productContext) {
       if (productContext.startsWith('ORDER STATUS:')) {
-        contextBlock = '\n\n' + productContext +
-          '\n\nIMPORTANT: Give the customer a warm, clear update on their Kindly order. ' +
-          'Lead with the status emoji and label. Mention the delivery date if available. ' +
-          'List 2-3 items from their order if the list is long. ' +
-          'Keep it friendly and reassuring — this is a Brighton local business. ' +
-          'Do NOT append any database indicator tag.';
+        // Extract masked details from context if available
+        const maskedPhoneMatch = productContext.match(/masked_phone:([^\n]+)/);
+        const maskedEmailMatch = productContext.match(/masked_email:([^\n]+)/);
+        const maskedPhone = maskedPhoneMatch ? maskedPhoneMatch[1].trim() : '';
+        const maskedEmail = maskedEmailMatch ? maskedEmailMatch[1].trim() : '';
+        const confirmLine = maskedPhone
+          ? `The number on this order is ${maskedPhone}. The email is ${maskedEmail}.`
+          : maskedEmail
+            ? `The email on this order is ${maskedEmail}.`
+            : '';
+        // Check if this is a cancelled order — needs special handling
+        const isCancelledOrder = productContext.includes('Raw status: Cancelled') ||
+                                  productContext.includes('Raw status: cancelled');
+
+        if (isCancelledOrder) {
+          // Extract the delivery address from context
+          const addrMatch = productContext.match(/Delivery address on order: ([^\n]+)/);
+          const deliveryAddr = addrMatch ? addrMatch[1].trim() : '';
+
+          // Extract postcode from address for specific mention
+          const postcodeMatch = deliveryAddr.match(/\b([A-Z]{1,2}[0-9][0-9A-Z]?\s*[0-9][A-Z]{2})\b/i);
+          const postcode = postcodeMatch ? postcodeMatch[1].toUpperCase() : '';
+
+          // Extract door number and first part of postcode only
+          // e.g. "42 Borough High Street, London SE1 1XR" → door "42", postcode area "SE1"
+          const doorMatch    = deliveryAddr.match(/^(\d+[a-zA-Z]?)/);
+          const doorNumber   = doorMatch ? doorMatch[1] : '';
+          const pcAreaMatch  = deliveryAddr.match(/\b([A-Z]{1,2}[0-9][0-9A-Z]?)\s*[0-9][A-Z]{2}\b/i);
+          const postcodeArea = pcAreaMatch ? pcAreaMatch[1].toUpperCase() : postcode;
+
+          const addressHint  = doorNumber && postcodeArea
+            ? `door number ${doorNumber} with postcode area ${postcodeArea}`
+            : postcodeArea
+              ? `postcode area ${postcodeArea}`
+              : 'the address provided';
+
+          contextBlock = '\n\n' + productContext +
+            '\n\nIMPORTANT: This order was cancelled because the delivery address is outside ' +
+            'Kindly\'s delivery area. ' +
+            'Tell the customer warmly and specifically: ' +
+            `(1) Confirm the delivery address on the order shows ${addressHint} — do NOT show the full address. ` +
+            (postcodeArea ? `(2) Explain that ${postcodeArea} is not within Kindly's delivery area. ` : '') +
+            '(3) Say Kindly currently only delivers to local Brighton postcodes — BN1, BN2 and BN3. ' +
+            '(4) Confirm the order has been cancelled and a full refund has been processed back to the same payment method used. ' +
+            '(5) Say the refund should be back in their account within 2-4 working days. ' +
+            '(6) Apologise sincerely for the inconvenience. ' +
+            '(7) Suggest they visit either store in person — York Place (BN1 4GU) or Dyke Road (BN1 3TE). ' +
+            'Be warm, human and genuinely sorry — not robotic. Do NOT append any database indicator tag.';
+        } else {
+          contextBlock = '\n\n' + productContext +
+            '\n\nIMPORTANT: Give the customer a warm, clear update on their Kindly order. ' +
+            'First briefly confirm their identity by mentioning the masked contact details: ' + confirmLine + ' ' +
+            'Then lead with the status emoji and label. Mention the delivery date if available. ' +
+            'Summarise 2-3 items from their order if the list is long. ' +
+            'Keep it friendly and reassuring. Do NOT append any database indicator tag.';
+        }
       } else if (productContext === 'ORDER_NOT_FOUND') {
         contextBlock = '\n\nTell the customer warmly that you could not find an order matching ' +
           'those details. Ask them to double-check: (1) their order number — it appears as #XXXX ' +
           'in their confirmation email, and (2) the email they used when ordering. ' +
           'Suggest contacting hello@kindlyofbrighton.com if they still need help. Be warm, not robotic.';
       } else {
-        // Missing details
-        contextBlock = '\n\nThe customer is asking about their order but hasn\'t provided ' +
-          'their order number and email. Ask them warmly for: ' +
-          '(1) their order number (e.g. #2421 — found in their confirmation email), and ' +
-          '(2) the email address they used when placing the order. ' +
-          'Explain you need both to look up their order securely.';
+        // Missing details — adapt ask based on channel
+        const isWa = !!customerPhone;
+        contextBlock = isWa
+          ? '\n\nThe customer is asking about their order via WhatsApp. Ask them warmly for ' +
+            'just their order number (e.g. #2421 — found in their confirmation email). ' +
+            'Explain that their phone number will be used to verify their identity automatically.'
+          : '\n\nThe customer is asking about their order on the website. Ask them warmly for: ' +
+            '(1) their order number (e.g. #2421 — from their confirmation email), and ' +
+            '(2) the email address they used when ordering. Explain you need both to verify securely.';
       }
     } else if (isRefillGuide && foundInDb && productContext) {
       contextBlock = '\n\n' + productContext +
