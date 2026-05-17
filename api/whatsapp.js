@@ -54,6 +54,9 @@ export default async function handler(req, res) {
   // ── Build message for Sol ─────────────────────────────────────
   const solUrl = 'https://ask-sol.vercel.app/api/chat';
 
+  // Extract clean phone number from Twilio's "whatsapp:+447782561688" format
+  const customerPhone = from ? from.replace('whatsapp:', '').replace(/[^0-9+]/g, '') : '';
+
   const messages = [
     {
       role: 'user',
@@ -68,10 +71,12 @@ export default async function handler(req, res) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 500,
-        system:     buildWhatsAppSystemPrompt(),
+        model:           'claude-haiku-4-5-20251001',
+        max_tokens:      500,
+        system:          buildWhatsAppSystemPrompt(),
         messages,
+        _customer_phone: customerPhone,  // passed through for order lookup
+        _channel:        'whatsapp',
       }),
     });
 
