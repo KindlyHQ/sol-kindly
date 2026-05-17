@@ -35,8 +35,8 @@ export default async function handler(req, res) {
   if (!apiKey) return res.status(500).json({ error: 'API key not configured' });
 
   try {
-    const messages = req.body.messages || [];
-  const customerPhone = req.body._customer_phone || '';
+    const messages      = req.body.messages || [];
+    const customerPhone = req.body._customer_phone || '';
     const lastMessage = messages[messages.length - 1];
     let customerQuestion = '';
     let hadImage = false;
