@@ -75,18 +75,23 @@ export default async function handler(req, res) {
     const isProductPairing = detectProductPairing(qLower);
     const isPositiveFeedback = detectGoogleReview(qLower);
     const isOrderQuery     = detectOrderQuery(qLower);
-    // Scan ENTIRE conversation history for order number + email
-    // (customer may have provided them in previous messages)
-    const allText          = messages.map(m =>
+    // Scan recent messages (last 4 only) for order number + email
+    // Never scan full history — old orders/emails contaminate new queries
+    const recentMessages   = messages.slice(-4);
+    const recentText       = recentMessages.map(m =>
       Array.isArray(m.content) ? m.content.map(c => c.text || '').join(' ') : (m.content || '')
     ).join(' ');
-    const orderDetails     = isOrderQuery
-      ? extractOrderDetails(allText)
-      : extractOrderDetails(customerQuestion);
-    // Also detect if this IS an order query because the conversation history contains one
-    const isOrderContext   = !isOrderQuery && messages.length > 1 &&
-      detectOrderQuery(allText.toLowerCase()) &&
-      extractOrderDetails(allText).orderNumber !== null;
+    // Always prefer order number from current message, fall back to recent history
+    const currentDetails   = extractOrderDetails(customerQuestion);
+    const recentDetails    = extractOrderDetails(recentText);
+    const orderDetails     = {
+      orderNumber: currentDetails.orderNumber || (isOrderQuery ? recentDetails.orderNumber : null),
+      email:       currentDetails.email       || recentDetails.email,
+    };
+    // Detect order context from recent history only (not full history)
+    const isOrderContext   = !isOrderQuery && recentMessages.length > 1 &&
+      detectOrderQuery(recentText.toLowerCase()) &&
+      recentDetails.orderNumber !== null;
 
     let productContext = '';
     let storeContext   = '';
@@ -486,12 +491,23 @@ function detectOrderQuery(q) {
 }
 
 function extractOrderDetails(text) {
-  const orderMatch = text.match(/#?(\d{3,6})/);
-  const emailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/i);
-  return {
-    orderNumber: orderMatch ? orderMatch[1] : null,
-    email:       emailMatch ? emailMatch[0].toLowerCase() : null,
-  };
+  // Take the LAST order number in the text
+  const allOrders = text.match(/#?(\d{3,6})/g);
+  const orderNumber = allOrders ? allOrders[allOrders.length-1].replace('#','') : null;
+
+  // Only use email that appears AFTER the last order number
+  // This prevents old emails from previous order queries contaminating new ones
+  let email = null;
+  if (orderNumber) {
+    const lastOrderIdx = text.lastIndexOf(orderNumber);
+    const textAfterOrder = text.substring(lastOrderIdx);
+    const emailAfter = textAfterOrder.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/i);
+    if (emailAfter) email = emailAfter[0].toLowerCase();
+  } else {
+    const emailMatch = text.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/i);
+    if (emailMatch) email = emailMatch[0].toLowerCase();
+  }
+  return { orderNumber, email };
 }
 
 function detectRefillGuide(q) {
