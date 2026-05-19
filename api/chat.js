@@ -90,13 +90,18 @@ export default async function handler(req, res) {
         if (orderDetails.orderNumber && (orderDetails.email || customerPhone)) {
           try {
             const scriptUrl = process.env.SHOPIFY_ORDERS_SCRIPT_URL;
+            console.log('Order lookup - scriptUrl:', scriptUrl ? 'SET' : 'NOT SET');
+            console.log('Order lookup - orderNum:', orderDetails.orderNumber, 'email:', orderDetails.email, 'phone:', customerPhone ? 'SET' : 'NOT SET');
             if (scriptUrl) {
               const params = new URLSearchParams({ order: orderDetails.orderNumber });
               if (orderDetails.email) params.set('email', orderDetails.email);
               if (customerPhone) params.set('phone', customerPhone.replace(/[^0-9+]/g,''));
+              console.log('Order lookup URL:', scriptUrl.substring(0, 60) + '...' );
               const r = await fetch(`${scriptUrl}?${params.toString()}`);
+              console.log('Order lookup response status:', r.status);
               if (r.ok) {
                 const d = await r.json();
+                console.log('Order lookup result:', d.found ? 'FOUND' : 'NOT FOUND', d.code || '');
                 if (d.found) {
                   const isCancelled = d.raw_status === 'Cancelled';
                   productContext =
