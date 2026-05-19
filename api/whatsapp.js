@@ -91,13 +91,10 @@ export default async function handler(req, res) {
     const isHiring    = /\b(hiring|hire|job|jobs|vacancy|vacancies|work here|career|apply|join the team|work for kindly|recruitment|positions available|any roles|openings|opportunities)\b/.test(qLower);
     const isAbout     = /\b(about kindly|who are you|what is kindly|kindly story|founded|mission|impact|plastic|co2|environment)\b/.test(qLower);
     const isLoyalty   = /\b(loyalty|points|reward|loyalzoo|sign up|membership|lty)\b/.test(qLower);
+    const isOffTopic  = /\b(weather|news|sport|politics|stock|crypto|bitcoin|recipe for|how to cook|tell me a joke|who is the president)\b/.test(qLower);
     const isOrder     = /\b(order|my order|order status|track|when.*deliver|delivery.*when|shipped|dispatch|parcel|status of my order|status.*order)\b/.test(qLower) ||
       (/\b(order|status)\b/.test(qLower) && /\d{3,6}/.test(body)) ||
       /^#?\d{3,6}$/.test(body.trim());
-    const isTGTG      = /\b(tgtg|too good to go|magic bag|food bag|leftover bag)\b/.test(qLower);
-    const isOffTopic  = /\b(weather|news|sport|politics|stock|crypto|bitcoin|recipe for|how to cook|tell me a joke|who is the president)\b/.test(qLower);
-
-    // Order number and email extraction
     const orderNumMatch = body.match(/#?(\d{3,6})/);
     const emailMatch    = body.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/i);
 
@@ -117,11 +114,7 @@ export default async function handler(req, res) {
       solReply = "Some of our most popular picks are the Biona organic range, Clearspring products, and our bulk refill staples like oats, lentils, and nuts. Our freshly baked bread and the LoofCo cleaning range always go down well too! Pop in and ask the team for today's favourites 🌱";
       fromDb = false;
 
-    } else if (/(phone|call|telephone|ring|contact number|speak to someone|talk to someone|number for)/.test(qLower)) {
-      solReply = "We don't have a customer phone line — best way to reach us is email hello@kindlyofbrighton.com or pop into store. York Place: Mon-Sat 8am-8pm, Sun 10am-7pm. Dyke Road: Mon-Thu 9am-8pm, Fri-Sat 9am-7pm, Sun 10am-7pm 🌱";
-      fromDb = true;
-
-    } else if (/(how many (people|staff|team|employee|work)|headcount|team size|number of staff)/.test(qLower)) {
+    } else if (/\b(how many (people|staff|team|employee|work)|headcount|team size|number of staff)\b/.test(qLower)) {
       solReply = "We have 26 team members across our two Brighton stores — a passionate bunch of Brighton locals who genuinely care about sustainability and good food 🌱";
       fromDb = true;
 
@@ -136,10 +129,6 @@ export default async function handler(req, res) {
     // ════════════════════════════════════════════════════════════════════════
     // STEP 3: Store info — answer directly from Supabase (no Claude needed)
     // ════════════════════════════════════════════════════════════════════════
-    } else if (isTGTG) {
-      solReply = "Yes! We're a Too Good To Go partner 🌱 Our magic bags are listed on the TGTG app — just search for Kindly Brighton. Check the app for today's availability and pickup time. Every bag helps reduce food waste!";
-      fromDb = false;
-
     } else if ((isStoreInfo || isHiring || isAbout || isLoyalty) && supabaseUrl && supabaseKey) {
       try {
         const info = await fetchStoreInfo(supabaseUrl, supabaseKey);
