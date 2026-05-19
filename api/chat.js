@@ -273,7 +273,7 @@ export default async function handler(req, res) {
     } else if (foundInDb && productContext) {
       contextBlock = '\n\n' + productContext +
         '\n\nAnswer using these specific Kindly products. Be accurate and helpful. ' +
-        '\nEnd with: "📋 *From Kindly\'s product database*"';
+        'Do NOT add any source tag or database indicator at the end.';
 
     } else {
       const waNumber = process.env.KINDLY_WHATSAPP_NUMBER || '';
@@ -613,7 +613,11 @@ async function lookupBasketProducts(supabaseUrl, supabaseKey, mealQuery) {
 }
 
 function isRefill(product) {
-  return product.category && product.category.toLowerCase().includes('refill');
+  // Only mark as plastic-free if category explicitly contains 'refill'
+  // Never mark branded packaged products as plastic-free
+  if (!product.category) return false;
+  const cat = product.category.toLowerCase();
+  return cat.includes('refill') && !cat.includes('non-refill');
 }
 
 function formatBasketContext(products, mealQuery) {
