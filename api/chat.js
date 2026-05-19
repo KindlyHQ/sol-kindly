@@ -225,10 +225,18 @@ export default async function handler(req, res) {
       } else if (productContext === 'ORDER_NOT_FOUND') {
         contextBlock = '\n\nOrder not found. Ask customer to check their order number (#XXXX from confirmation email) and email address. Suggest hello@kindlyofbrighton.com if still stuck. Be warm.';
       } else {
-        const isWa = !!customerPhone;
-        contextBlock = isWa
-          ? '\n\nCustomer asking about order via WhatsApp. Ask for order number (#XXXX from confirmation email) — phone will be used to verify automatically.'
-          : '\n\nAsk for order number (#XXXX from confirmation email) AND email address used when ordering. Need both to verify securely.';
+        // Missing details — be smart about what we already have
+        const isWa      = !!customerPhone;
+        const hasOrderNum = orderDetails && orderDetails.orderNumber;
+        if (isWa) {
+          contextBlock = hasOrderNum
+            ? `\n\nCustomer gave order number ${orderDetails.orderNumber}. Their WhatsApp phone will verify them. Confirm you\'re looking it up using their phone number automatically — no email needed.`
+            : '\n\nAsk warmly for their order number only (e.g. #2421 from their confirmation email). Explain their WhatsApp phone number verifies them automatically so no email is needed.';
+        } else {
+          contextBlock = hasOrderNum
+            ? `\n\nCustomer gave order number ${orderDetails.orderNumber} but no email yet. Ask ONLY for the email address they used when placing this order. Do NOT ask for the order number again. Do NOT say "go to the website" — Sol can look this up.`
+            : '\n\nAsk for their order number (#XXXX from confirmation email) AND email used when ordering. Do NOT tell them to go to the website — Sol handles order lookups directly.';
+        }
       }
 
     } else if (isSurpriseMe && foundInDb && productContext) {
@@ -303,7 +311,7 @@ export default async function handler(req, res) {
     let solAnswer = data.content?.[0]?.text || '';
 
     // Google review nudge on positive feedback
-    if (isPositiveFeedback && solAnswer && !hadImage && Math.random() < 0.33) {
+    if (isPositiveFeedback && solAnswer && !hadImage && Math.random() < 0.5) {
       solAnswer = solAnswer + '\n\n😊 *So glad I could help! A quick Google review means the world to a small independent shop: https://g.page/r/kindly-brighton/review*';
     }
 
@@ -443,7 +451,7 @@ function detectHiringQuestion(q) {
 }
 
 function detectOrderQuery(q) {
-  return /\b(order|my order|where.*order|order.*status|track.*order|when.*deliver|delivery.*when|has.*shipped|shipped|dispatch|parcel|tracking|order number|check.*order)\b/.test(q);
+  return /\b(order|my order|where.*order|order.*status|track.*order|when.*deliver|delivery.*when|has.*shipped|shipped|dispatch|parcel|tracking|order number|check.*order|status of my order|status.*order|order.*\d{3,6}|\d{3,6}.*order)\b/.test(q);
 }
 
 function extractOrderDetails(text) {
@@ -464,8 +472,7 @@ function detectProductPairing(q) {
 }
 
 function detectGoogleReview(q) {
-  // Detects when a conversation has gone well and a review nudge is appropriate
-  return /\b(thank|thanks|helpful|great|love|amazing|brilliant|perfect|excellent|fantastic|wonderful)\b/.test(q);
+  return /\b(thank|thanks|thank you|helpful|great|love|amazing|brilliant|perfect|excellent|fantastic|wonderful|cheers|appreciate|superb|awesome|perfect)\b/.test(q);
 }
 
 function detectAboutKindlyQuestion(q) {
