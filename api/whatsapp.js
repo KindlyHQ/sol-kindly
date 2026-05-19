@@ -12,26 +12,53 @@ import crypto from 'crypto';
 
 export default async function handler(req, res) {
 
-  if (req.method !== 'POST') return res.status(405).send('Method not allowed');
+  // ── Always return TwiML — never let the handler fail silently ────────────
+  // Vercel must receive a response or Twilio shows message as "received" with no reply
+  res.setHeader('Content-Type', 'text/xml');
+
+  if (req.method !== 'POST') {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    return res.status(405).send('Method not allowed');
+  }
 
   res.setHeader('Access-Control-Allow-Origin', '*');
 
+  // Wrap entire handler in try-catch so ANY error still sends a TwiML reply
+  try {
+
   // ── Parse form-encoded body from Twilio ───────────────────────────────────
-  // Vercel doesn't auto-parse application/x-www-form-urlencoded
-  // so we parse it manually
-  if (!req.body || typeof req.body !== 'object' || Buffer.isBuffer(req.body)) {
+  // Always parse manually - most reliable for Twilio webhooks on Vercel
+  let parsedBody = {};
+  try {
     const rawBody = await new Promise((resolve, reject) => {
-      let data = '';
-      req.on('data', chunk => { data += chunk.toString(); });
-      req.on('end',  () => resolve(data));
-      req.on('error', reject);
+      // If body is already a readable stream
+      if (req.readable !== false) {
+        let data = '';
+        req.on('data', chunk => { data += chunk.toString(); });
+        req.on('end',  () => resolve(data));
+        req.on('error', reject);
+        // Timeout safety
+        setTimeout(() => resolve(''), 3000);
+      } else {
+        // Body may already be parsed by Vercel
+        resolve('');
+      }
     });
-    const params = new URLSearchParams(rawBody);
-    req.body = {};
-    for (const [key, val] of params.entries()) {
-      req.body[key] = val;
+    if (rawBody) {
+      const params = new URLSearchParams(rawBody);
+      for (const [key, val] of params.entries()) {
+        parsedBody[key] = val;
+      }
     }
+    // Fall back to req.body if raw parse got nothing
+    if (Object.keys(parsedBody).length === 0 && req.body && typeof req.body === 'object') {
+      parsedBody = req.body;
+    }
+  } catch(e) {
+    console.error('Body parse error:', e.message);
+    if (req.body && typeof req.body === 'object') parsedBody = req.body;
   }
+  req.body = parsedBody;
 
   // ── Twilio signature validation (disabled - raw body needed for HMAC) ──────
   // TODO: re-enable with raw body string once body parsing is stable
@@ -268,7 +295,7 @@ export default async function handler(req, res) {
     }
 
   } catch (err) {
-    console.error('WhatsApp handler error:', err.message);
+    console.error('WhatsApp inner error:', err.message);
     solReply = "Sorry, I'm having a little trouble right now! Please try again in a moment, or email hello@kindlyofbrighton.com 🌱";
   }
 
@@ -425,6 +452,16 @@ async function forwardToSlack(from, question, answer) {
       text: `💬 *WhatsApp question Sol couldn't answer from DB*\n*From:* ${num}\n*Question:* ${question}\n*Sol replied:* ${answer.substring(0, 150)}`,
     }),
   });
+}
+
+  } catch (fatalErr) {
+    console.error('FATAL whatsapp handler error:', fatalErr.message, fatalErr.stack);
+    // Always return valid TwiML even on fatal error
+    const escaped = "Sorry, something went wrong! Please try again or email hello@kindlyofbrighton.com 🌱";
+    return res.status(200).send(
+      '<?xml version="1.0" encoding="UTF-8"?><Response><Message>' + escaped + '</Message></Response>'
+    );
+  }
 }
 
 export const config = {
