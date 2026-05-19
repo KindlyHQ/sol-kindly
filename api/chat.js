@@ -75,7 +75,18 @@ export default async function handler(req, res) {
     const isProductPairing = detectProductPairing(qLower);
     const isPositiveFeedback = detectGoogleReview(qLower);
     const isOrderQuery     = detectOrderQuery(qLower);
-    const orderDetails     = isOrderQuery ? extractOrderDetails(customerQuestion) : {};
+    // Scan ENTIRE conversation history for order number + email
+    // (customer may have provided them in previous messages)
+    const allText          = messages.map(m =>
+      Array.isArray(m.content) ? m.content.map(c => c.text || '').join(' ') : (m.content || '')
+    ).join(' ');
+    const orderDetails     = isOrderQuery
+      ? extractOrderDetails(allText)
+      : extractOrderDetails(customerQuestion);
+    // Also detect if this IS an order query because the conversation history contains one
+    const isOrderContext   = !isOrderQuery && messages.length > 1 &&
+      detectOrderQuery(allText.toLowerCase()) &&
+      extractOrderDetails(allText).orderNumber !== null;
 
     let productContext = '';
     let storeContext   = '';
@@ -85,8 +96,8 @@ export default async function handler(req, res) {
     // ── Supabase lookups ───────────────────────────────────────────────────
     if (supabaseUrl && supabaseKey) {
 
-      // Order status lookup
-      if (isOrderQuery) {
+      // Order status lookup — check both current message and conversation context
+      if (isOrderQuery || isOrderContext) {
         if (orderDetails.orderNumber && (orderDetails.email || customerPhone)) {
           try {
             const scriptUrl = process.env.SHOPIFY_ORDERS_SCRIPT_URL;
@@ -129,6 +140,10 @@ export default async function handler(req, res) {
               }
             }
           } catch(e) { console.error('Order lookup error:', e.name, e.message); }
+        } else if (orderDetails.orderNumber && !orderDetails.email && !customerPhone) {
+          // Have order number but no email/phone
+          productContext = 'ORDER_NEED_EMAIL';
+          foundInDb = true;
         } else {
           productContext = 'ORDER_MISSING_DETAILS';
           foundInDb = true;
@@ -236,6 +251,8 @@ export default async function handler(req, res) {
             `Lead with status emoji and label. Mention delivery date if available. ` +
             `Summarise items if list is long. Friendly and reassuring. Do NOT add any source tag.`;
         }
+      } else if (productContext === 'ORDER_NEED_EMAIL') {
+        contextBlock = '\n\nYou have the order number but need the email. Ask the customer for the email address they used when placing the order on kindlyofbrighton.com. Be warm and brief.';
       } else if (productContext === 'ORDER_NOT_FOUND') {
         contextBlock = '\n\nOrder not found. Ask customer to check their order number (#XXXX from confirmation email) and email address. Suggest hello@kindlyofbrighton.com if still stuck. Be warm.';
       } else {
