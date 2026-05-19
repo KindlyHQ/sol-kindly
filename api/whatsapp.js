@@ -26,39 +26,32 @@ export default async function handler(req, res) {
   // Wrap entire handler in try-catch so ANY error still sends a TwiML reply
   try {
 
-  // ── Parse form-encoded body from Twilio ───────────────────────────────────
-  // Always parse manually - most reliable for Twilio webhooks on Vercel
+  // ── Parse Twilio's form-encoded body ────────────────────────────────────
+  // Vercel with bodyParser:false passes raw Buffer — we need to decode it
   let parsedBody = {};
   try {
-    const rawBody = await new Promise((resolve, reject) => {
-      // If body is already a readable stream
-      if (req.readable !== false) {
-        let data = '';
-        req.on('data', chunk => { data += chunk.toString(); });
-        req.on('end',  () => resolve(data));
-        req.on('error', reject);
-        // Timeout safety
-        setTimeout(() => resolve(''), 3000);
-      } else {
-        // Body may already be parsed by Vercel
-        resolve('');
-      }
-    });
-    if (rawBody) {
-      const params = new URLSearchParams(rawBody);
-      for (const [key, val] of params.entries()) {
-        parsedBody[key] = val;
-      }
-    }
-    // Fall back to req.body if raw parse got nothing
-    if (Object.keys(parsedBody).length === 0 && req.body && typeof req.body === 'object') {
+    if (req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+      // Already parsed (shouldn't happen with bodyParser:false but handle it)
       parsedBody = req.body;
+    } else {
+      // Read raw body - works with both Buffer and stream
+      const rawBody = await new Promise((resolve, reject) => {
+        const chunks = [];
+        req.on('data', chunk => chunks.push(Buffer.from(chunk)));
+        req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+        req.on('error', reject);
+      });
+      console.log('Raw body received:', rawBody.substring(0, 100));
+      if (rawBody) {
+        const params = new URLSearchParams(rawBody);
+        params.forEach((val, key) => { parsedBody[key] = val; });
+      }
     }
   } catch(e) {
     console.error('Body parse error:', e.message);
-    if (req.body && typeof req.body === 'object') parsedBody = req.body;
   }
   req.body = parsedBody;
+  console.log('Parsed From:', parsedBody.From, 'Body:', parsedBody.Body?.substring(0, 50));
 
   // ── Twilio signature validation (disabled - raw body needed for HMAC) ──────
   // TODO: re-enable with raw body string once body parsing is stable
