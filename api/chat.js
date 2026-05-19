@@ -97,10 +97,19 @@ export default async function handler(req, res) {
               if (orderDetails.email) params.set('email', orderDetails.email);
               if (customerPhone) params.set('phone', customerPhone.replace(/[^0-9+]/g,''));
               console.log('Order lookup URL:', scriptUrl.substring(0, 60) + '...' );
-              const r = await fetch(`${scriptUrl}?${params.toString()}`);
-              console.log('Order lookup response status:', r.status);
+              const controller = new AbortController();
+              const timeout = setTimeout(() => controller.abort(), 8000);
+              let r;
+              try {
+                r = await fetch(`${scriptUrl}?${params.toString()}`, { signal: controller.signal });
+              } finally {
+                clearTimeout(timeout);
+              }
+              console.log('Order lookup response status:', r.status, r.statusText);
+              const responseText = await r.text();
+              console.log('Order lookup raw response:', responseText.substring(0, 200));
               if (r.ok) {
-                const d = await r.json();
+                const d = JSON.parse(responseText);
                 console.log('Order lookup result:', d.found ? 'FOUND' : 'NOT FOUND', d.code || '');
                 if (d.found) {
                   const isCancelled = d.raw_status === 'Cancelled';
@@ -119,7 +128,7 @@ export default async function handler(req, res) {
                 }
               }
             }
-          } catch(e) { console.error('Order lookup:', e.message); }
+          } catch(e) { console.error('Order lookup error:', e.name, e.message); }
         } else {
           productContext = 'ORDER_MISSING_DETAILS';
           foundInDb = true;
