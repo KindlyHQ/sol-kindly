@@ -89,7 +89,7 @@ export default async function handler(req, res) {
     const currentDetails   = extractOrderDetails(customerQuestion);
     const recentDetails    = extractOrderDetails(recentText);
     const orderDetails     = {
-      orderNumber: currentDetails.orderNumber || (isOrderQuery ? recentDetails.orderNumber : null),
+      orderNumber: currentDetails.orderNumber || ((isOrderQuery || isOrderContext) ? recentDetails.orderNumber : null),
       email:       currentDetails.email       || recentDetails.email,
     };
     // Detect order context from recent history only (not full history)
