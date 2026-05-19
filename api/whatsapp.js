@@ -51,7 +51,7 @@ export default async function handler(req, res) {
     console.error('Body parse error:', e.message);
   }
   req.body = parsedBody;
-  console.log('Parsed From:', parsedBody.From, 'Body:', parsedBody.Body?.substring(0, 50));
+  console.log('Parsed From:', parsedBody.From, 'Body:', parsedBody.Body ? parsedBody.Body.substring(0, 50) : 'empty');
 
   // ── Twilio signature validation (disabled - raw body needed for HMAC) ──────
   // TODO: re-enable with raw body string once body parsing is stable
@@ -92,8 +92,8 @@ export default async function handler(req, res) {
     const isAbout     = /\b(about kindly|who are you|what is kindly|kindly story|founded|mission|impact|plastic|co2|environment)\b/.test(qLower);
     const isLoyalty   = /\b(loyalty|points|reward|loyalzoo|sign up|membership|lty)\b/.test(qLower);
     const isOrder     = /\b(order|my order|order status|track|when.*deliver|delivery.*when|shipped|dispatch|parcel|status of my order|status.*order)\b/.test(qLower) ||
-      (/\b(order|status)\b/.test(qLower) && /\d{3,6}/.test(body));
-                      || /^#?\d{3,6}$/.test(body.trim()); // bare order number reply
+      (/\b(order|status)\b/.test(qLower) && /\d{3,6}/.test(body)) ||
+      /^#?\d{3,6}$/.test(body.trim());
     const isTGTG      = /\b(tgtg|too good to go|magic bag|food bag|leftover bag)\b/.test(qLower);
     const isOffTopic  = /\b(weather|news|sport|politics|stock|crypto|bitcoin|recipe for|how to cook|tell me a joke|who is the president)\b/.test(qLower);
 
