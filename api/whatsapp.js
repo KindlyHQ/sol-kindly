@@ -55,11 +55,15 @@ export default async function handler(req, res) {
     // ════════════════════════════════════════════════════════════════════════
     // STEP 1: Detect question type
     // ════════════════════════════════════════════════════════════════════════
-    const isStoreInfo = /\b(open|close|opening|closing|hours|time|address|location|find you|where are|get to|park)\b/.test(qLower);
-    const isHiring    = /\b(hiring|job|jobs|vacancy|work here|career|apply|join the team)\b/.test(qLower);
+    const isTGTG     = /\b(tgtg|too good to go|magic bag|food bag|surplus bag)\b/.test(qLower);
+    const isStoreInfo = !isTGTG && /\b(open|close|opening|closing|hours|time|address|location|find you|where are|get to|park)\b/.test(qLower);
+    const isHiring    = /\b(hiring|hire|job|jobs|vacancy|vacancies|work here|career|apply|join the team|work for kindly|recruitment|positions available|any roles|openings|opportunities)\b/.test(qLower);
     const isAbout     = /\b(about kindly|who are you|what is kindly|kindly story|founded|mission|impact|plastic|co2|environment)\b/.test(qLower);
     const isLoyalty   = /\b(loyalty|points|reward|loyalzoo|sign up|membership|lty)\b/.test(qLower);
-    const isOrder     = /\b(order|my order|order status|track|when.*deliver|delivery.*when|shipped|dispatch|parcel)\b/.test(qLower);
+    const isOrder     = /\b(order|my order|order status|track|when.*deliver|delivery.*when|shipped|dispatch|parcel|status of my order|status.*order)\b/.test(qLower) ||
+      (/\b(order|status)\b/.test(qLower) && /\d{3,6}/.test(body));
+                      || /^#?\d{3,6}$/.test(body.trim()); // bare order number reply
+    const isTGTG      = /\b(tgtg|too good to go|magic bag|food bag|leftover bag)\b/.test(qLower);
     const isOffTopic  = /\b(weather|news|sport|politics|stock|crypto|bitcoin|recipe for|how to cook|tell me a joke|who is the president)\b/.test(qLower);
 
     // Order number and email extraction
@@ -69,13 +73,42 @@ export default async function handler(req, res) {
     // ════════════════════════════════════════════════════════════════════════
     // STEP 2: Off-topic guard
     // ════════════════════════════════════════════════════════════════════════
-    if (isOffTopic) {
+    if (isTGTG) {
+      solReply = "Yes! Kindly partners with Too Good To Go 🌱 The best way to check today's magic bag availability and pickup time is directly in the Too Good To Go app — search for Kindly of Brighton. Bags tend to go fast so grab it early!";
+      fromDb = true;
+
+    } else if (/\b(phone|call|telephone|ring|contact number|speak to someone|talk to someone)\b/.test(qLower)) {
+      solReply = "We don't have a phone line — the best way to reach us is to pop into store or email hello@kindlyofbrighton.com and we'll get back to you promptly 🌱 York Place: Mon-Sat 8am-8pm, Sun 10am-7pm. Dyke Road: Mon-Thu 9am-8pm, Fri-Sat 9am-7pm, Sun 10am-7pm.";
+      fromDb = true;
+
+    } else if (/\b(top sell|best sell|popular|most popular|bestsell|recommend|favourite|favorite|top product)\b/.test(qLower)) {
+      // Give a curated answer from general knowledge rather than DB "first result"
+      solReply = "Some of our most popular picks are the Biona organic range, Clearspring products, and our bulk refill staples like oats, lentils, and nuts. Our freshly baked bread and the LoofCo cleaning range always go down well too! Pop in and ask the team for today's favourites 🌱";
+      fromDb = false;
+
+    } else if (/(phone|call|telephone|ring|contact number|speak to someone|talk to someone|number for)/.test(qLower)) {
+      solReply = "We don't have a customer phone line — best way to reach us is email hello@kindlyofbrighton.com or pop into store. York Place: Mon-Sat 8am-8pm, Sun 10am-7pm. Dyke Road: Mon-Thu 9am-8pm, Fri-Sat 9am-7pm, Sun 10am-7pm 🌱";
+      fromDb = true;
+
+    } else if (/(how many (people|staff|team|employee|work)|headcount|team size|number of staff)/.test(qLower)) {
+      solReply = "We have 26 team members across our two Brighton stores — a passionate bunch of Brighton locals who genuinely care about sustainability and good food 🌱";
+      fromDb = true;
+
+    } else if (/(how many supplier|who (are your|do you work with)|supplier)/.test(qLower)) {
+      solReply = "We work with hundreds of suppliers — a mix of local Brighton producers and small ethical UK brands. We prioritise organic, independent, and community-rooted suppliers wherever possible. Ask the team in store for stories about your favourite products 🌱";
+      fromDb = true;
+
+    } else if (isOffTopic) {
       solReply = "I'm Sol — Kindly Brighton's product guide, so I'm best at questions about our range, hours, ingredients and allergens! 🌱 Is there anything Kindly-related I can help with?";
       fromDb = false;
 
     // ════════════════════════════════════════════════════════════════════════
     // STEP 3: Store info — answer directly from Supabase (no Claude needed)
     // ════════════════════════════════════════════════════════════════════════
+    } else if (isTGTG) {
+      solReply = "Yes! We're a Too Good To Go partner 🌱 Our magic bags are listed on the TGTG app — just search for Kindly Brighton. Check the app for today's availability and pickup time. Every bag helps reduce food waste!";
+      fromDb = false;
+
     } else if ((isStoreInfo || isHiring || isAbout || isLoyalty) && supabaseUrl && supabaseKey) {
       try {
         const info = await fetchStoreInfo(supabaseUrl, supabaseKey);
@@ -94,7 +127,19 @@ export default async function handler(req, res) {
             const dr = info.dyke_road_hours  || 'Mon-Thu 9am-8pm, Fri-Sat 9am-7pm, Sun 10am-7pm';
             const ya = info.york_place_address || '20-21 York Place, Brighton BN1 4GU';
             const da = info.dyke_road_address  || '110-114 Dyke Road, Brighton BN1 3TE';
-            if (qLower.includes('york') || qLower.includes('address')) {
+            const wantsYork  = qLower.includes('york');
+            const wantsDyke  = qLower.includes('dyke');
+            const wantsAddr  = qLower.includes('address') || qLower.includes('where') || qLower.includes('find');
+            const wantsHours = qLower.includes('hour') || qLower.includes('open') || qLower.includes('close') || qLower.includes('time');
+            if (wantsYork && !wantsDyke) {
+              solReply = wantsAddr
+                ? `York Place\n${ya}\nHours: ${yp}`
+                : `York Place: ${yp}`;
+            } else if (wantsDyke && !wantsYork) {
+              solReply = wantsAddr
+                ? `Dyke Road\n${da}\nHours: ${dr}`
+                : `Dyke Road: ${dr}`;
+            } else if (wantsAddr) {
               solReply = `York Place: ${ya}\nHours: ${yp}\n\nDyke Road: ${da}\nHours: ${dr}`;
             } else {
               solReply = `York Place: ${yp}\nDyke Road: ${dr}`;
@@ -102,7 +147,11 @@ export default async function handler(req, res) {
           } else if (isAbout) {
             const plastic = info.plastic_units_diverted || '344,000+';
             const co2     = info.co2_saved || '66t';
-            solReply = `Kindly is Brighton's sustainable supermarket — 100% plant-based, plastic-free refill options, ~80% organic. We've diverted ${plastic} plastic units and saved ${co2} of CO₂. Founded by Shiv Misra in 2019. 66p of every £1 stays in the Brighton economy 🌱`;
+            // Clean the plastic value — remove any duplicate text
+            const plasticClean = String(plastic).replace(/[^0-9,+K]/g, '').trim() || '340,000+';
+            const co2Clean     = String(co2).replace(/\s*(of CO₂|CO₂|saved|through.*)$/i, '').trim() || '66t';
+            const employees    = info.employees ? ` We have ${info.employees} team members.` : ' We have 26 team members.';
+            solReply = `Kindly is Brighton's sustainable supermarket — 100% plant-based, plastic-free refill options, ~80% organic.${employees} We've diverted over ${plasticClean} plastic units and saved ${co2Clean} of CO₂. Founded by Shiv Misra in 2019. 66p of every £1 stays in the Brighton economy 🌱`;
           }
         }
       } catch(e) {
