@@ -85,17 +85,17 @@ export default async function handler(req, res) {
     const recentText       = recentMessages.map(m =>
       Array.isArray(m.content) ? m.content.map(c => c.text || '').join(' ') : (m.content || '')
     ).join(' ');
-    // Always prefer order number from current message, fall back to recent history
+    // Detect order context FIRST before building orderDetails
+    const isOrderContext   = !isOrderQuery && recentMessages.length > 1 &&
+      detectOrderQuery(recentText.toLowerCase()) &&
+      extractOrderDetails(recentText).orderNumber !== null;
+    // Now build orderDetails using isOrderContext
     const currentDetails   = extractOrderDetails(customerQuestion);
     const recentDetails    = extractOrderDetails(recentText);
     const orderDetails     = {
       orderNumber: currentDetails.orderNumber || ((isOrderQuery || isOrderContext) ? recentDetails.orderNumber : null),
       email:       currentDetails.email       || recentDetails.email,
     };
-    // Detect order context from recent history only (not full history)
-    const isOrderContext   = !isOrderQuery && recentMessages.length > 1 &&
-      detectOrderQuery(recentText.toLowerCase()) &&
-      recentDetails.orderNumber !== null;
 
     let productContext = '';
     let storeContext   = '';
@@ -261,7 +261,10 @@ export default async function handler(req, res) {
             `Summarise items if list is long. Friendly and reassuring. Do NOT add any source tag.`;
         }
       } else if (productContext === 'ORDER_NEED_EMAIL') {
-        contextBlock = '\n\nYou have the order number but need the email. Ask the customer for the email address they used when placing the order on kindlyofbrighton.com. Be warm and brief.';
+        contextBlock = '\n\nIMPORTANT: You have order number ' + (orderDetails.orderNumber || '') + ' but need the email address to look it up. ' +
+          'Ask ONLY for the email they used when placing this order. ' +
+          'Do NOT say you cannot access orders. Do NOT redirect to hello@kindlyofbrighton.com. ' +
+          'Sol can look this up — you just need their email first.';
       } else if (productContext === 'ORDER_NOT_FOUND') {
         contextBlock = '\n\nOrder not found. Ask customer to check their order number (#XXXX from confirmation email) and email address. Suggest hello@kindlyofbrighton.com if still stuck. Be warm.';
       } else {
